@@ -1,0 +1,939 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>سیستم صدور فیش A5 - درخواست قطعات از انبار مرکزی</title>
+    
+    <!-- تنظیمات رسمی وب‌اپلیکیشن (PWA) -->
+    <link rel="manifest" href="./manifest.json">
+    <meta name="theme-color" content="#1e3a8a">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="./icon-192.png">
+
+    <!-- کتابخانه‌های ساخت مستقیم PDF واقعی A5 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+    <style>
+        :root {
+            --primary: #1e3a8a; --primary-hover: #172554; --accent: #0284c7;
+            --bg: #e2e8f0; --card-bg: #ffffff; --border: #cbd5e1; --text: #0f172a;
+        }
+        * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Arial, sans-serif; margin: 0; padding: 0; }
+        body { background-color: var(--bg); color: var(--text); padding: 15px; direction: rtl; }
+        .container { max-width: 920px; margin: 0 auto; }
+        .controls-card { background: var(--card-bg); border-radius: 12px; padding: 18px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); margin-bottom: 20px; border: 1px solid var(--border); }
+        .controls-card h2 { margin-bottom: 12px; color: var(--primary); font-size: 1.15rem; display: flex; align-items: center; gap: 8px; }
+        .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-bottom: 14px; }
+        .form-group { display: flex; flex-direction: column; gap: 4px; }
+        .form-group label { font-size: 0.78rem; font-weight: bold; color: #475569; }
+        .form-control { padding: 7px 9px; border-radius: 6px; border: 1px solid var(--border); font-size: 0.88rem; outline: none; }
+        .form-control:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.15); }
+        .dropdown-wrapper { position: relative; width: 100%; }
+        .dropdown-btn { width: 100%; padding: 7px 10px; background: white; border: 1px solid var(--border); border-radius: 6px; text-align: right; font-size: 0.85rem; cursor: pointer; display: flex; justify-content: space-between; align-items: center; color: #334155; outline: none; height: 35px; }
+        .dropdown-btn:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.15); }
+        .dropdown-menu { display: none; position: absolute; top: 100%; right: 0; left: 0; background: white; border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 8px 20px rgba(0,0,0,0.15); margin-top: 4px; padding: 8px; z-index: 1000; max-height: 220px; overflow-y: auto; }
+        .dropdown-menu.show { display: block; }
+        .dropdown-actions { display: flex; justify-content: space-between; font-size: 0.72rem; padding-bottom: 6px; margin-bottom: 6px; border-bottom: 1px solid #e2e8f0; color: #64748b; }
+        .action-link { color: #0284c7; cursor: pointer; font-weight: 600; text-decoration: underline; }
+        .dropdown-item { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 4px; font-size: 0.8rem; cursor: pointer; }
+        .dropdown-item:hover { background: #f1f5f9; }
+        .btn-group { display: flex; flex-wrap: wrap; gap: 8px; }
+        .btn { padding: 8px 15px; border-radius: 6px; font-weight: 600; font-size: 0.82rem; cursor: pointer; border: none; display: inline-flex; align-items: center; gap: 6px; }
+        .btn-generate { background: #16a34a; color: white; }
+        .btn-direct-pdf { background: #dc2626; color: white; font-weight: bold; }
+        .btn-word { background: #2b579a; color: white; }
+        .btn-bom { background: #475569; color: white; }
+        .btn-add { background: #0284c7; color: white; }
+        .btn-install { background: #4338ca; color: white; }
+        .a5-sheet { width: 148mm; min-height: 210mm; height: 210mm; background: white; padding: 5mm 7mm 4mm 7mm; margin: 0 auto 20px auto; border-radius: 4px; border: 1px solid #94a3b8; box-shadow: 0 4px 15px rgba(0,0,0,0.12); position: relative; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; }
+        .receipt-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1.5px solid #0f172a; padding-bottom: 3px; margin-bottom: 4px; }
+        .receipt-title h1 { font-size: 1.05rem; color: #0f172a; text-align: center; }
+        .header-date-box { font-size: 0.76rem; color: #334155; text-align: left; white-space: nowrap; }
+        .receipt-meta { display: flex; align-items: center; justify-content: space-between; background: #f8fafc; border: 1px solid #cbd5e1; padding: 3px 6px; border-radius: 4px; margin-bottom: 5px; font-size: 0.71rem; gap: 4px; width: 100%; overflow: hidden; box-sizing: border-box; }
+        .meta-col-product { flex-shrink: 0; white-space: nowrap; }
+        .meta-col-section { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 4px; }
+        .meta-col-count, .meta-col-no { flex-shrink: 0; white-space: nowrap; }
+        .receipt-meta span { font-weight: bold; color: #0f172a; }
+        .receipt-table { width: 100%; border-collapse: collapse; font-size: 0.77rem; margin-bottom: auto; }
+        .receipt-table th { background-color: #f1f5f9; color: #0f172a; border: 1px solid #475569; padding: 4px 2px; text-align: center; font-weight: bold; height: 25px; }
+        .receipt-table td { border: 1px solid #cbd5e1; padding: 4px 3px; text-align: center; height: 31px; }
+        .receipt-table td.col-name { text-align: right; padding-right: 6px; font-weight: 500; }
+        .subgroup-tag { display: inline-block; font-size: 0.62rem; background: #e0f2fe; color: #0369a1; padding: 1px 3px; border-radius: 3px; margin-left: 3px; vertical-align: middle; }
+        .delete-btn { color: #ef4444; cursor: pointer; font-weight: bold; border: 1px solid #fca5a5; background: #fef2f2; border-radius: 3px; padding: 0 4px; font-size: 0.78rem; line-height: 1.1; }
+        .receipt-footer-area { margin-top: 4px; }
+        .signatures-area { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding-top: 3px; border-top: 1px dashed #cbd5e1; text-align: center; }
+        .sign-box { font-size: 0.7rem; color: #334155; height: 28px; display: flex; flex-direction: column; justify-content: space-between; }
+        .page-badge-row { display: flex; justify-content: flex-end; padding-left: 2px; margin-top: 2px; }
+        .page-badge { font-size: 0.65rem; color: #64748b; direction: ltr; font-family: monospace; font-weight: bold; }
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15, 23, 42, 0.6); z-index: 2000; align-items: center; justify-content: center; padding: 16px; }
+        .modal-overlay.show { display: flex; }
+        .modal-box { background: white; border-radius: 10px; max-width: 800px; width: 100%; max-height: 88vh; display: flex; flex-direction: column; box-shadow: 0 10px 25px rgba(0,0,0,0.25); border: 1px solid #94a3b8; }
+        .modal-header { padding: 12px 18px; background: #f1f5f9; border-bottom: 1px solid #cbd5e1; display: flex; justify-content: space-between; align-items: center; }
+        .modal-header h3 { font-size: 1rem; color: var(--primary); }
+        .modal-body { padding: 16px; overflow-y: auto; flex: 1; }
+        .modal-footer { padding: 12px 18px; background: #f8fafc; border-top: 1px solid #cbd5e1; display: flex; justify-content: space-between; align-items: center; }
+        .bom-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; margin-bottom: 15px; }
+        .bom-table th, .bom-table td { border: 1px solid #cbd5e1; padding: 6px 8px; text-align: center; }
+        .bom-table th { background: #f1f5f9; color: #1e293b; }
+        .bom-table td.col-name { text-align: right; }
+        .bom-qty-input { width: 60px; padding: 4px 6px; text-align: center; font-size: 0.85rem; border: 1px solid #cbd5e1; border-radius: 4px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="controls-card no-print">
+        <h2>⚙️ پنل صدور فیش و درخواست قطعات</h2>
+        <div class="form-grid">
+            <div class="form-group">
+                <label for="productSelect">نوع محصول:</label>
+                <select id="productSelect" class="form-control" onchange="onProductChange()">
+                    <option value="aska">تابلو آسکا</option>
+                    <option value="pika">تابلو پیکا</option>
+                    <option value="haira">تابلو هایرا</option>
+                    <option value="custom" style="color: #0284c7; font-weight: bold;">📋 درخواست متفرقه / آزاد</option>
+                </select>
+            </div>
+
+            <div class="form-group" id="subgroupContainer">
+                <label style="color: #0369a1; font-weight: bold;">انتخاب بخش‌ها (کشویی):</label>
+                <div class="dropdown-wrapper">
+                    <button type="button" class="dropdown-btn" id="dropdownBtn" onclick="toggleDropdown(event)">
+                        <span id="dropdownBtnText">هیچ بخشی انتخاب نشده (کلیک کنید)...</span>
+                        <span style="font-size: 0.7rem; color: #64748b;">▼</span>
+                    </button>
+                    <div class="dropdown-menu" id="dropdownMenu">
+                        <div class="dropdown-actions">
+                            <span class="action-link" onclick="selectAllSubgroups(true)">انتخاب همه</span>
+                            <span> | </span>
+                            <span class="action-link" onclick="selectAllSubgroups(false)">لغو همه</span>
+                        </div>
+                        <div id="dropdownCheckboxes"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="panelCount" style="color: #dc2626; font-weight: bold;" id="labelCount">تعداد ساخت تابلو:</label>
+                <input type="number" id="panelCount" class="form-control" placeholder="تعداد را وارد کنید" min="1" onkeydown="if(event.key === 'Enter') generateBOM()">
+            </div>
+            <div class="form-group">
+                <label for="receiptNo">شماره حواله:</label>
+                <input type="text" id="receiptNo" class="form-control" value="PPR00001">
+            </div>
+            <div class="form-group">
+                <label for="receiptDate">تاریخ فیش:</label>
+                <input type="text" id="receiptDate" class="form-control">
+            </div>
+            <div class="form-group">
+                <label for="rowsPerPage">ردیف در هر برگ A5:</label>
+                <input type="number" id="rowsPerPage" class="form-control" value="18" min="8" max="25">
+            </div>
+        </div>
+
+        <div class="btn-group">
+            <button class="btn btn-generate" onclick="generateBOM()">🚀 تولید و صدور فیش</button>
+            <button class="btn btn-direct-pdf" id="btnDirectPdf" onclick="downloadDirectA5PDF()">📥 دانلود مستقیم فایل PDF (قطع A5)</button>
+            <button class="btn btn-word" onclick="exportToWord()">📝 دریافت فایل Word (قطع A5)</button>
+            <button class="btn btn-bom" onclick="openBomModal()">📋 فرمول تولید (BOM)</button>
+            <button class="btn btn-add" onclick="addNewRow()">➕ افزودن ردیف دستی</button>
+            <!-- دکمه نصب اختصاصی اپلیکیشن -->
+            <button class="btn btn-install" id="btnInstallApp" style="display:none;" onclick="triggerPWAInstall()">📲 نصب برنامه روی گوشی</button>
+        </div>
+        <p style="font-size: 0.76rem; color: #64748b; margin-top: 8px;">
+            💡 تمامی تغییرات، قطعات فریم، لاستیک و مهره پنل نجات اعمال شده و آماده نصب روی گوشی است.
+        </p>
+    </div>
+
+    <div id="pagesContainer">
+        <div style="background: white; padding: 35px; border-radius: 8px; text-align: center; color: #64748b; border: 1px dashed #cbd5e1; max-width: 550px; margin: 0 auto;">
+            📌 لطفاً <strong>بخش‌های مورد نظر</strong> را از منوی کشویی بالا انتخاب کرده و دکمه سبز رنگ <strong>«تولید و صدور فیش»</strong> را بزنید.
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay no-print" id="bomModalOverlay">
+    <div class="modal-box">
+        <div class="modal-header">
+            <h3>📋 فرمول تولید و ساخت (به ازای ۱ دستگاه تابلو)</h3>
+            <button style="border:none; background:none; font-size:1.2rem; cursor:pointer;" onclick="closeBomModal()">✕</button>
+        </div>
+        <div class="modal-body">
+            <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 15px;">
+                <label style="font-weight: bold; font-size: 0.85rem;">انتخاب تابلو جهت بررسی و ویرایش فرمول تولید:</label>
+                <select id="bomProductSelect" class="form-control" style="width: 200px;" onchange="renderBomEditor()">
+                    <option value="aska">تابلو آسکا</option>
+                    <option value="pika">تابلو پیکا</option>
+                    <option value="haira">تابلو هایرا</option>
+                </select>
+            </div>
+            <div id="bomEditorContent"></div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn" style="background:#dc2626; color:white;" onclick="resetBomToDefaults()">🔄 بازنشانی به پیش‌فرض کارخانه</button>
+            <div style="display:flex; gap:8px;">
+                <button class="btn" style="background:#64748b; color:white;" onclick="closeBomModal()">✕ بستن</button>
+                <button class="btn btn-generate" onclick="saveBomEdits()">💾 ذخیره فرمول تولید</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const defaultCatalog = {
+        aska: {
+            name: "تابلو آسکا",
+            subgroups: {
+                main: {
+                    name: "تابلو اصلی",
+                    items: [
+                        { name: "فیوز سه فاز هیمل 32 آمپر", perPanel: 1, unit: "عدد" },
+                        { name: "فیوز تکفاز هیمل 25 آمپر", perPanel: 1, unit: "عدد" },
+                        { name: "فیوز تکفاز هیمل 10 آمپر", perPanel: 1, unit: "عدد" },
+                        { name: "کنتاکتور هیمل 32 آمپر", perPanel: 1, unit: "عدد" },
+                        { name: "کنتاکتور هیمل 12 آمپر", perPanel: 1, unit: "عدد" },
+                        { name: "کمکی کنتاکتور هیمل", perPanel: 1, unit: "عدد" },
+                        { name: "پل دیود", perPanel: 1, unit: "عدد" },
+                        { name: "ست داکت", perPanel: 1, unit: "ست" },
+                        { name: "ترانس", perPanel: 1, unit: "عدد" },
+                        { name: "سوئیچینگ 200 وات", perPanel: 1, unit: "عدد" },
+                        { name: "برد رله پاور", perPanel: 1, unit: "عدد" },
+                        { name: "برد کنترل فاز", perPanel: 1, unit: "عدد" },
+                        { name: "برد PRP Main", perPanel: 1, unit: "عدد" },
+                        { name: "ست ترمینال کامل", perPanel: 1, unit: "عدد" },
+                        { name: "بست انتهایی", perPanel: 1, unit: "عدد" },
+                        { name: "ریل 13-14 سانتی‌متری", perPanel: 1, unit: "عدد" },
+                        { name: "سینی", perPanel: 1, unit: "عدد" }
+                    ]
+                },
+                terminals: {
+                    name: "ست ترمینال",
+                    items: [
+                        { name: "ریل 50 سانتی‌متری", perPanel: 1, unit: "عدد" },
+                        { name: "پایه ریل", perPanel: 3, unit: "عدد" },
+                        { name: "بست انتهایی", perPanel: 2, unit: "عدد" },
+                        { name: "ترمینال سبز 2.5", perPanel: 28, unit: "عدد" },
+                        { name: "ترمینال زرد 2.5", perPanel: 2, unit: "عدد" },
+                        { name: "ترمینال قرمز 2.5", perPanel: 3, unit: "عدد" },
+                        { name: "ترمینال طوسی 2.5", perPanel: 18, unit: "عدد" },
+                        { name: "ترمینال مشکی 2.5", perPanel: 10, unit: "عدد" },
+                        { name: "ترمینال آبی 2.5", perPanel: 4, unit: "عدد" },
+                        { name: "ترمینال ارت 2.5", perPanel: 1, unit: "عدد" },
+                        { name: "ترمینال طوسی 6", perPanel: 3, unit: "عدد" },
+                        { name: "ترمینال آبی 6", perPanel: 1, unit: "عدد" }
+                    ]
+                },
+                rescue_panel: {
+                    name: "پنل نجات",
+                    items: [
+                        { name: "پنل نجات چاپ شده", perPanel: 1, unit: "عدد" },
+                        { name: "شستی استارت یک باز (استار)", perPanel: 1, unit: "عدد" },
+                        { name: "کنتاکت NO", perPanel: 1, unit: "عدد" },
+                        { name: "کلید سلکتور (استار)", perPanel: 1, unit: "عدد" },
+                        { name: "کنتاکت NC", perPanel: 1, unit: "عدد" },
+                        { name: "چراغ سیگنال", perPanel: 1, unit: "عدد" },
+                        { name: "لاستیک و مهره پلاستیکی", perPanel: 2, unit: "عدد" }
+                    ]
+                },
+                carcodec: {
+                    name: "کارکدک",
+                    items: [
+                        { name: "بدنه کارکدک", perPanel: 1, unit: "عدد" },
+                        { name: "پنل نجات آماده", perPanel: 1, unit: "عدد" },
+                        { name: "باتری", perPanel: 1, unit: "عدد" },
+                        { name: "برد شارژر", perPanel: 1, unit: "عدد" },
+                        { name: "برد کارکدک", perPanel: 1, unit: "عدد" },
+                        { name: "برد گویا", perPanel: 1, unit: "عدد" },
+                        { name: "آژیر", perPanel: 1, unit: "عدد" },
+                        { name: "ریل 22 سانتی‌متری", perPanel: 1, unit: "عدد" },
+                        { name: "ترمینال زرد 2.5", perPanel: 4, unit: "عدد" },
+                        { name: "ترمینال قرمز 2.5", perPanel: 4, unit: "عدد" },
+                        { name: "ترمینال طوسی 2.5", perPanel: 6, unit: "عدد" },
+                        { name: "ترمینال سبز 2.5", perPanel: 12, unit: "عدد" },
+                        { name: "ترمینال ارت 2.5", perPanel: 1, unit: "عدد" },
+                        { name: "ترمینال آبی 2.5", perPanel: 3, unit: "عدد" },
+                        { name: "ترمینال مشکی 2.5", perPanel: 4, unit: "عدد" },
+                        { name: "درپوش ترمینال", perPanel: 1, unit: "عدد" },
+                        { name: "بست انتهایی", perPanel: 2, unit: "عدد" },
+                        { name: "دسته سیم‌کشی کارکدک", perPanel: 1, unit: "عدد" }
+                    ]
+                },
+                carcodec_panel: {
+                    name: "پنل کارکدک",
+                    items: [
+                        { name: "پنل چاپ شده", perPanel: 1, unit: "عدد" },
+                        { name: "شستی استارت طرح فانال", perPanel: 3, unit: "عدد" },
+                        { name: "کلید سلکتور طرح فانال", perPanel: 1, unit: "عدد" },
+                        { name: "استپ قارچی", perPanel: 1, unit: "عدد" },
+                        { name: "پریز", perPanel: 1, unit: "عدد" }
+                    ]
+                },
+                frame_packaging: {
+                    name: "فریم و بسته بندی",
+                    items: [
+                        { name: "ست بدنه کامل با درب", perPanel: 1, unit: "ست" },
+                        { name: "پشت لوگو", perPanel: 1, unit: "عدد" },
+                        { name: "فیلتر فن", perPanel: 2, unit: "عدد" },
+                        { name: "دستگیره", perPanel: 2, unit: "عدد" },
+                        { name: "قفل درب", perPanel: 1, unit: "عدد" },
+                        { name: "چراغ LED", perPanel: 1, unit: "عدد" },
+                        { name: "کارتن کوچک", perPanel: 1, unit: "عدد" },
+                        { name: "کارتن بزرگ", perPanel: 1, unit: "عدد" },
+                        { name: "مقاومت ترمز 2kw", perPanel: 1, unit: "عدد" },
+                        { name: "پک ملزومات", perPanel: 1, unit: "عدد" },
+                        { name: "پک پذیرایی", perPanel: 1, unit: "عدد" }
+                    ]
+                }
+            }
+        },
+        pika: {
+            name: "تابلو پیکا",
+            subgroups: {
+                main: {
+                    name: "تابلو اصلی",
+                    items: [
+                        { name: "فیوز سه فاز هیمل 32 آمپر", perPanel: 1, unit: "عدد" },
+                        { name: "فیوز تکفاز هیمل 25 آمپر", perPanel: 1, unit: "عدد" },
+                        { name: "فیوز تکفاز هیمل 10 آمپر", perPanel: 1, unit: "عدد" },
+                        { name: "کنتاکتور هیمل 32 آمپر", perPanel: 1, unit: "عدد" },
+                        { name: "کنتاکتور هیمل 12 آمپر", perPanel: 1, unit: "عدد" },
+                        { name: "کمکی کنتاکتور هیمل", perPanel: 1, unit: "عدد" },
+                        { name: "سوئیچینگ 300 وات", perPanel: 1, unit: "عدد" },
+                        { name: "رله 110 ولت", perPanel: 1, unit: "عدد" },
+                        { name: "پایه رله 110 ولت", perPanel: 1, unit: "عدد" },
+                        { name: "رله 24 ولت", perPanel: 1, unit: "عدد" },
+                        { name: "پایه رله 24 ولت", perPanel: 1, unit: "عدد" },
+                        { name: "ترمینال فیوز خور", perPanel: 3, unit: "عدد" },
+                        { name: "شینه ارت", perPanel: 1, unit: "عدد" },
+                        { name: "ست ترمینال کامل", perPanel: 1, unit: "عدد" },
+                        { name: "ست داکت", perPanel: 1, unit: "ست" },
+                        { name: "پنل نجات پیکا (شش سوراخ) آماده", perPanel: 1, unit: "عدد" },
+                        { name: "ریل کنتاکتور 22 سانتی‌متری", perPanel: 1, unit: "عدد" },
+                        { name: "برد کنترل فاز", perPanel: 1, unit: "عدد" },
+                        { name: "برد MSP 24", perPanel: 1, unit: "عدد" },
+                        { name: "ترانس", perPanel: 1, unit: "عدد" },
+                        { name: "پل دیود", perPanel: 2, unit: "عدد" },
+                        { name: "بست انتهایی", perPanel: 2, unit: "عدد" },
+                        { name: "سینی", perPanel: 1, unit: "عدد" }
+                    ]
+                },
+                rescue_panel: {
+                    name: "پنل نجات",
+                    items: [
+                        { name: "پنل نجات پیکا چاپ شده", perPanel: 1, unit: "عدد" },
+                        { name: "شستی استارت یک باز (استار)", perPanel: 3, unit: "عدد" },
+                        { name: "کلید سلکتور یک باز (استار)", perPanel: 2, unit: "عدد" },
+                        { name: "کنتاکت NO", perPanel: 3, unit: "عدد" },
+                        { name: "کنتاکت NC", perPanel: 3, unit: "عدد" },
+                        { name: "چراغ سیگنال 24 ولتی", perPanel: 1, unit: "عدد" },
+                        { name: "لاستیک و مهره پلاستیکی", perPanel: 5, unit: "عدد" }
+                    ]
+                },
+                terminals: {
+                    name: "ست ترمینال",
+                    items: [
+                        { name: "بست انتهایی", perPanel: 2, unit: "عدد" },
+                        { name: "ترمینال سبز 2.5", perPanel: 10, unit: "عدد" },
+                        { name: "ترمینال زرد 2.5", perPanel: 1, unit: "عدد" },
+                        { name: "ترمینال قرمز 2.5", perPanel: 3, unit: "عدد" },
+                        { name: "ترمینال طوسی 2.5", perPanel: 18, unit: "عدد" },
+                        { name: "ترمینال مشکی 2.5", perPanel: 10, unit: "عدد" },
+                        { name: "ترمینال آبی 2.5", perPanel: 4, unit: "عدد" },
+                        { name: "ترمینال ارت 2.5", perPanel: 1, unit: "عدد" },
+                        { name: "ترمینال طوسی 6", perPanel: 3, unit: "عدد" },
+                        { name: "ترمینال آبی 6", perPanel: 1, unit: "عدد" }
+                    ]
+                },
+                carcodec: {
+                    name: "کارکدک",
+                    items: [
+                        { name: "پنل کارکدک آماده", perPanel: 1, unit: "عدد" },
+                        { name: "باتری", perPanel: 1, unit: "عدد" },
+                        { name: "آژیر", perPanel: 1, unit: "عدد" },
+                        { name: "برد شارژر", perPanel: 1, unit: "عدد" },
+                        { name: "برد کارکدک پیکا", perPanel: 1, unit: "عدد" },
+                        { name: "برد MSP 24", perPanel: 1, unit: "عدد" },
+                        { name: "برد گویا", perPanel: 1, unit: "عدد" },
+                        { name: "ماژول مموری", perPanel: 1, unit: "عدد" },
+                        { name: "سوکت برد گویا", perPanel: 1, unit: "عدد" },
+                        { name: "ریل 22 سانتی‌متری", perPanel: 1, unit: "عدد" },
+                        { name: "بست انتهایی", perPanel: 2, unit: "عدد" },
+                        { name: "ترمینال سبز 2.5", perPanel: 16, unit: "عدد" },
+                        { name: "ترمینال زرد 2.5", perPanel: 2, unit: "عدد" },
+                        { name: "ترمینال قرمز 2.5", perPanel: 4, unit: "عدد" },
+                        { name: "ترمینال طوسی 2.5", perPanel: 6, unit: "عدد" },
+                        { name: "ترمینال مشکی 2.5", perPanel: 5, unit: "عدد" },
+                        { name: "ترمینال آبی 2.5", perPanel: 4, unit: "عدد" },
+                        { name: "ترمینال ارت 2.5", perPanel: 1, unit: "عدد" },
+                        { name: "درپوش ترمینال", perPanel: 1, unit: "عدد" }
+                    ]
+                },
+                carcodec_panel: {
+                    name: "پنل کارکدک",
+                    items: [
+                        { name: "پنل چاپ شده", perPanel: 1, unit: "عدد" },
+                        { name: "شستی استارت طرح فانال", perPanel: 3, unit: "عدد" },
+                        { name: "کلید سلکتور طرح فانال", perPanel: 1, unit: "عدد" },
+                        { name: "استپ قارچی", perPanel: 1, unit: "عدد" },
+                        { name: "پریز", perPanel: 1, unit: "عدد" }
+                    ]
+                },
+                frame_packaging: {
+                    name: "فریم و بسته بندی",
+                    items: [
+                        { name: "ست بدنه کامل با درب", perPanel: 1, unit: "ست" },
+                        { name: "پشت لوگو", perPanel: 1, unit: "عدد" },
+                        { name: "فیلتر فن", perPanel: 2, unit: "عدد" },
+                        { name: "دستگیره", perPanel: 2, unit: "عدد" },
+                        { name: "قفل درب", perPanel: 1, unit: "عدد" },
+                        { name: "فن", perPanel: 1, unit: "عدد" },
+                        { name: "چراغ LED بزرگ", perPanel: 1, unit: "عدد" },
+                        { name: "کارتن کوچک", perPanel: 1, unit: "عدد" },
+                        { name: "کارتن بزرگ", perPanel: 1, unit: "عدد" },
+                        { name: "مقاومت ترمز 5kw", perPanel: 1, unit: "عدد" },
+                        { name: "پک ملزومات", perPanel: 1, unit: "عدد" },
+                        { name: "پک پذیرایی", perPanel: 1, unit: "عدد" }
+                    ]
+                }
+            }
+        },
+        haira: {
+            name: "تابلو هایرا",
+            subgroups: {
+                main: {
+                    name: "تابلو اصلی",
+                    items: [
+                        { name: "فیوز سه فاز گاسیا 32 آمپر", perPanel: 1, unit: "عدد" },
+                        { name: "فیوز تکفاز گاسیا 25 آمپر", perPanel: 1, unit: "عدد" },
+                        { name: "فیوز تکفاز گاسیا 10 آمپر", perPanel: 1, unit: "عدد" },
+                        { name: "کنتاکتور چانت 32 آمپر", perPanel: 1, unit: "عدد" },
+                        { name: "کنتاکتور چانت 12 آمپر", perPanel: 1, unit: "عدد" },
+                        { name: "کمکی کنتاکتور چانت", perPanel: 1, unit: "عدد" },
+                        { name: "پل دیود", perPanel: 1, unit: "عدد" },
+                        { name: "ست داکت", perPanel: 1, unit: "ست" },
+                        { name: "ترانس", perPanel: 1, unit: "عدد" },
+                        { name: "سوئیچینگ 200 وات", perPanel: 1, unit: "عدد" },
+                        { name: "برد رله پاور", perPanel: 1, unit: "عدد" },
+                        { name: "برد کنترل فاز", perPanel: 1, unit: "عدد" },
+                        { name: "برد PRP Main", perPanel: 1, unit: "عدد" },
+                        { name: "ست ترمینال کامل", perPanel: 1, unit: "عدد" },
+                        { name: "بست انتهایی", perPanel: 1, unit: "عدد" },
+                        { name: "ریل 13-14 سانتی‌متری", perPanel: 1, unit: "عدد" },
+                        { name: "سینی", perPanel: 1, unit: "عدد" }
+                    ]
+                },
+                terminals: {
+                    name: "ست ترمینال",
+                    items: [
+                        { name: "ریل 50 سانتی‌متری", perPanel: 1, unit: "عدد" },
+                        { name: "پایه ریل", perPanel: 3, unit: "عدد" },
+                        { name: "بست انتهایی", perPanel: 2, unit: "عدد" },
+                        { name: "ترمینال سبز 2.5", perPanel: 28, unit: "عدد" },
+                        { name: "ترمینال زرد 2.5", perPanel: 2, unit: "عدد" },
+                        { name: "ترمینال قرمز 2.5", perPanel: 3, unit: "عدد" },
+                        { name: "ترمینال طوسی 2.5", perPanel: 18, unit: "عدد" },
+                        { name: "ترمینال مشکی 2.5", perPanel: 10, unit: "عدد" },
+                        { name: "ترمینال آبی 2.5", perPanel: 4, unit: "عدد" },
+                        { name: "ترمینال ارت 2.5", perPanel: 1, unit: "عدد" },
+                        { name: "ترمینال طوسی 6", perPanel: 3, unit: "عدد" },
+                        { name: "ترمینال آبی 6", perPanel: 1, unit: "عدد" }
+                    ]
+                },
+                carcodec: {
+                    name: "کارکدک",
+                    items: [
+                        { name: "بدنه کارکدک", perPanel: 1, unit: "عدد" },
+                        { name: "پنل نجات آماده", perPanel: 1, unit: "عدد" },
+                        { name: "باتری", perPanel: 1, unit: "عدد" },
+                        { name: "برد شارژر", perPanel: 1, unit: "عدد" },
+                        { name: "برد کارکدک", perPanel: 1, unit: "عدد" },
+                        { name: "برد گویا", perPanel: 1, unit: "عدد" },
+                        { name: "آژیر", perPanel: 1, unit: "عدد" },
+                        { name: "ریل 22 سانتی‌متری", perPanel: 1, unit: "عدد" },
+                        { name: "ترمینال زرد 2.5", perPanel: 4, unit: "عدد" },
+                        { name: "ترمینال قرمز 2.5", perPanel: 4, unit: "عدد" },
+                        { name: "ترمینال طوسی 2.5", perPanel: 6, unit: "عدد" },
+                        { name: "ترمینال سبز 2.5", perPanel: 12, unit: "عدد" },
+                        { name: "ترمینال ارت 2.5", perPanel: 1, unit: "عدد" },
+                        { name: "ترمینال آبی 2.5", perPanel: 3, unit: "عدد" },
+                        { name: "ترمینال مشکی 2.5", perPanel: 4, unit: "عدد" },
+                        { name: "درپوش ترمینال", perPanel: 1, unit: "عدد" },
+                        { name: "بست انتهایی", perPanel: 2, unit: "عدد" },
+                        { name: "دسته سیم‌کشی کارکدک", perPanel: 1, unit: "عدد" }
+                    ]
+                },
+                carcodec_panel: {
+                    name: "پنل کارکدک",
+                    items: [
+                        { name: "پنل چاپ شده", perPanel: 1, unit: "عدد" },
+                        { name: "شستی استارت طرح فانال", perPanel: 3, unit: "عدد" },
+                        { name: "کلید سلکتور طرح فانال", perPanel: 1, unit: "عدد" },
+                        { name: "استپ قارچی", perPanel: 1, unit: "عدد" },
+                        { name: "پریز", perPanel: 1, unit: "عدد" }
+                    ]
+                },
+                frame_packaging: {
+                    name: "فریم و بسته بندی",
+                    items: [
+                        { name: "ست بدنه کامل با درب", perPanel: 1, unit: "ست" },
+                        { name: "پشت لوگو", perPanel: 1, unit: "عدد" },
+                        { name: "فیلتر فن", perPanel: 2, unit: "عدد" },
+                        { name: "دستگیره", perPanel: 2, unit: "عدد" },
+                        { name: "قفل درب", perPanel: 1, unit: "عدد" },
+                        { name: "چراغ LED", perPanel: 1, unit: "عدد" },
+                        { name: "کارتن کوچک", perPanel: 1, unit: "عدد" },
+                        { name: "کارتن بزرگ", perPanel: 1, unit: "عدد" },
+                        { name: "مقاومت ترمز 2kw", perPanel: 1, unit: "عدد" },
+                        { name: "پک ملزومات", perPanel: 1, unit: "عدد" },
+                        { name: "پک پذیرایی", perPanel: 1, unit: "عدد" }
+                    ]
+                }
+            }
+        }
+    };
+
+    let panelCatalog = JSON.parse(localStorage.getItem('savedPanelBOM')) || JSON.parse(JSON.stringify(defaultCatalog));
+
+    // همگام‌سازی خودکار اقلام جدید در حافظه محلی
+    ['aska', 'pika', 'haira'].forEach(p => {
+        if (panelCatalog[p] && panelCatalog[p].subgroups) {
+            panelCatalog[p].subgroups.frame_packaging = JSON.parse(JSON.stringify(defaultCatalog[p].subgroups.frame_packaging));
+            if (panelCatalog[p].subgroups.main && !panelCatalog[p].subgroups.main.items.some(i => i.name === 'سینی')) {
+                panelCatalog[p].subgroups.main.items.push({ name: "سینی", perPanel: 1, unit: "عدد" });
+            }
+            if (panelCatalog[p].subgroups.rescue_panel && !panelCatalog[p].subgroups.rescue_panel.items.some(i => i.name === 'لاستیک و مهره پلاستیکی')) {
+                const qty = p === 'aska' ? 2 : 5;
+                panelCatalog[p].subgroups.rescue_panel.items.push({ name: "لاستیک و مهره پلاستیکی", perPanel: qty, unit: "عدد" });
+            }
+        }
+    });
+
+    let currentWorkingItems = [], currentPanelCount = 0, currentSubgroupName = "", currentProductTitle = "";
+
+    window.onload = function() {
+        document.getElementById('receiptDate').value = new Intl.DateTimeFormat('fa-IR', { dateStyle: 'medium' }).format(new Date());
+        onProductChange();
+        document.addEventListener('click', function(e) {
+            const wrapper = document.querySelector('.dropdown-wrapper');
+            if (wrapper && !wrapper.contains(e.target)) {
+                document.getElementById('dropdownMenu').classList.remove('show');
+            }
+        });
+    };
+
+    function toggleDropdown(e) { e.stopPropagation(); document.getElementById('dropdownMenu').classList.toggle('show'); }
+
+    function onProductChange() {
+        const productKey = document.getElementById('productSelect').value;
+        const subContainer = document.getElementById('subgroupContainer');
+        const listContainer = document.getElementById('dropdownCheckboxes');
+        const labelCount = document.getElementById('labelCount');
+        listContainer.innerHTML = "";
+
+        if (productKey === 'custom') {
+            subContainer.style.display = 'none';
+            labelCount.innerText = "تعداد درخواست:";
+            if (!document.getElementById('panelCount').value) document.getElementById('panelCount').value = 1;
+            currentProductTitle = "درخواست متفرقه";
+            currentSubgroupName = "متفرقه";
+            currentPanelCount = parseInt(document.getElementById('panelCount').value) || 1;
+            currentWorkingItems = [{ name: "قطعه اول را تایپ کنید...", perPanel: 1, unit: "عدد", code: "", desc: "", subName: "" }];
+            renderPages();
+            return;
+        }
+
+        subContainer.style.display = 'flex';
+        labelCount.innerText = "تعداد ساخت تابلو:";
+        const product = panelCatalog[productKey];
+
+        if (product && product.subgroups) {
+            for (const [key, group] of Object.entries(product.subgroups)) {
+                const item = document.createElement('label');
+                item.className = 'dropdown-item';
+                item.innerHTML = `<input type="checkbox" name="subgroupCheck" value="${key}" onchange="updateDropdownText()"><span>${group.name}</span>`;
+                listContainer.appendChild(item);
+            }
+        }
+        updateDropdownText();
+    }
+
+    function selectAllSubgroups(status) {
+        document.querySelectorAll('input[name="subgroupCheck"]').forEach(cb => cb.checked = status);
+        updateDropdownText();
+    }
+
+    function updateDropdownText() {
+        const checked = document.querySelectorAll('input[name="subgroupCheck"]:checked');
+        const textSpan = document.getElementById('dropdownBtnText');
+        if (checked.length === 0) {
+            textSpan.innerText = "هیچ بخشی انتخاب نشده (کلیک کنید)...";
+            textSpan.style.color = "#64748b";
+        } else {
+            const all = document.querySelectorAll('input[name="subgroupCheck"]');
+            textSpan.innerText = (checked.length === all.length) ? "همه بخش‌ها انتخاب شدند" : Array.from(checked).map(c => c.parentElement.querySelector('span').innerText).join("، ");
+            textSpan.style.color = "#0f172a";
+        }
+    }
+
+    function generateBOM() {
+        const productKey = document.getElementById('productSelect').value;
+        const count = parseInt(document.getElementById('panelCount').value.trim()) || 0;
+
+        if (count <= 0) {
+            alert("لطفاً تعداد ساخت را وارد کنید.");
+            document.getElementById('panelCount').focus();
+            return;
+        }
+
+        currentPanelCount = count;
+        let items = [];
+
+        if (productKey === 'custom') {
+            currentProductTitle = "درخواست متفرقه";
+            currentSubgroupName = "متفرقه";
+            items = [
+                { name: "قطعه اول را تایپ کنید...", perPanel: 1, unit: "عدد", code: "", desc: "", subName: "" },
+                { name: "قطعه دوم را تایپ کنید...", perPanel: 1, unit: "عدد", code: "", desc: "", subName: "" }
+            ];
+            currentWorkingItems = items;
+            renderPages();
+            return;
+        }
+
+        const checkedBoxes = document.querySelectorAll('input[name="subgroupCheck"]:checked');
+        if (checkedBoxes.length === 0) {
+            alert("لطفاً از منوی کشویی، حداقل یک بخش را انتخاب کنید.");
+            document.getElementById('dropdownMenu').classList.add('show');
+            return;
+        }
+
+        const product = panelCatalog[productKey];
+        currentProductTitle = product.name;
+        const allBoxes = document.querySelectorAll('input[name="subgroupCheck"]');
+        let selectedNames = [];
+
+        checkedBoxes.forEach(cb => {
+            const group = product.subgroups[cb.value];
+            if (group) {
+                selectedNames.push(group.name);
+                if (group.items) {
+                    group.items.forEach(it => items.push({ ...it, subName: group.name, code: "", desc: "" }));
+                }
+            }
+        });
+
+        currentSubgroupName = (checkedBoxes.length === allBoxes.length) ? "کل مجموعه" : selectedNames.join(" + ");
+        currentWorkingItems = items;
+        renderPages();
+    }
+
+    function renderPages() {
+        const container = document.getElementById('pagesContainer');
+        container.innerHTML = "";
+
+        if (currentWorkingItems.length === 0) {
+            container.innerHTML = `<div style="background:white;padding:35px;border-radius:8px;text-align:center;color:#b91c1c;border:1px dashed #cbd5e1;max-width:550px;margin:0 auto;">⚠️ هیچ قلم کالایی برای بخش‌های انتخابی ثبت نشده است.</div>`;
+            return;
+        }
+
+        const rowsPerPage = parseInt(document.getElementById('rowsPerPage').value) || 18;
+        const totalItems = currentWorkingItems.length;
+        const totalPages = Math.ceil(totalItems / rowsPerPage) || 1;
+        const receiptNo = document.getElementById('receiptNo').value.trim() || "PPR00001";
+        const receiptDate = document.getElementById('receiptDate').value;
+
+        for (let p = 0; p < totalPages; p++) {
+            const pageNumber = p + 1;
+            const startIdx = p * rowsPerPage;
+            const pageItems = currentWorkingItems.slice(startIdx, Math.min(startIdx + rowsPerPage, totalItems));
+            const sheet = document.createElement('div');
+            sheet.className = 'a5-sheet';
+
+            let rowsHtml = '';
+            pageItems.forEach((item, index) => {
+                const globalIndex = startIdx + index;
+                const totalQty = item.perPanel * currentPanelCount;
+                const subBadge = item.subName ? `<span class="subgroup-tag">${item.subName}</span>` : '';
+                rowsHtml += `
+                    <tr data-index="${globalIndex}">
+                        <td style="color:#64748b;">${globalIndex + 1}</td>
+                        <td contenteditable="true" style="font-family:monospace;">${item.code || ''}</td>
+                        <td class="col-name" contenteditable="true">${subBadge}${item.name}</td>
+                        <td contenteditable="true" style="color:#64748b;">${item.perPanel}</td>
+                        <td contenteditable="true"><strong style="color:#0f172a;font-size:0.95rem;">${totalQty}</strong></td>
+                        <td contenteditable="true">${item.unit}</td>
+                        <td contenteditable="true">${item.desc || ''}</td>
+                        <td class="no-print"><button class="delete-btn" title="حذف" onclick="deleteItem(${globalIndex})">✕</button></td>
+                    </tr>`;
+            });
+
+            if (pageItems.length < rowsPerPage) {
+                const emptyRowsCount = rowsPerPage - pageItems.length;
+                for (let e = 0; e < emptyRowsCount; e++) {
+                    const emptyIndex = startIdx + pageItems.length + e + 1;
+                    rowsHtml += `
+                        <tr class="empty-row">
+                            <td style="color:#cbd5e1;">${emptyIndex}</td>
+                            <td contenteditable="true"></td><td class="col-name" contenteditable="true"></td>
+                            <td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td>
+                            <td contenteditable="true"></td><td class="no-print"></td>
+                        </tr>`;
+                }
+            }
+
+            sheet.innerHTML = `
+                <div>
+                    <div class="receipt-header">
+                        <div>
+                            <h3 style="font-size:0.85rem;color:#1e3a8a;margin:0;">حواله قطعات و انبار</h3>
+                            <small style="color:#64748b;font-size:0.65rem;">سیستم مونتاژ خط تولید</small>
+                        </div>
+                        <div class="receipt-title"><h1>درخواست قطعات از انبار مرکزی</h1></div>
+                        <div class="header-date-box">تاریخ: <strong class="header-date">${receiptDate}</strong></div>
+                    </div>
+                    <div class="receipt-meta">
+                        <div class="meta-col-product">محصول: <span>${currentProductTitle}</span></div>
+                        <div class="meta-col-section" title="تولید تابلو (${currentSubgroupName})">بخش: <span>تولید تابلو (${currentSubgroupName})</span></div>
+                        <div class="meta-col-count">ساخت: <span>${currentPanelCount} دستگاه</span></div>
+                        <div class="meta-col-no">حواله: <span class="meta-no">${receiptNo}</span></div>
+                    </div>
+                    <table class="receipt-table">
+                        <thead>
+                            <tr>
+                                <th style="width:28px;">ردیف</th><th style="width:58px;">کد کالا</th>
+                                <th>نام و مشخصات کالا</th><th style="width:40px;">ضریب</th>
+                                <th style="width:48px;">تعداد کل</th><th style="width:35px;">واحد</th>
+                                <th style="width:75px;">توضیحات</th><th style="width:28px;" class="no-print">حذف</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rowsHtml}</tbody>
+                    </table>
+                </div>
+                <div class="receipt-footer-area">
+                    <div class="signatures-area">
+                        <div class="sign-box"><span>درخواست کننده:</span><span>امضا: ....................</span></div>
+                        <div class="sign-box"><span>تایید فنی:</span><span>امضا: ....................</span></div>
+                        <div class="sign-box"><span>تحویل دهنده انبار:</span><span>امضا: ....................</span></div>
+                    </div>
+                    <div class="page-badge-row"><span class="page-badge">${pageNumber}/${totalPages}</span></div>
+                </div>`;
+            container.appendChild(sheet);
+        }
+    }
+
+    function syncEdits() {
+        document.querySelectorAll('.receipt-table tbody tr').forEach(tr => {
+            const idx = parseInt(tr.getAttribute('data-index'));
+            if (!isNaN(idx) && currentWorkingItems[idx]) {
+                currentWorkingItems[idx].code = tr.children[1].innerText.trim();
+                currentWorkingItems[idx].name = tr.children[2].innerText.replace(/\[.*?\]/g, '').trim();
+                currentWorkingItems[idx].perPanel = parseFloat(tr.children[3].innerText) || 1;
+                currentWorkingItems[idx].unit = tr.children[5].innerText.trim();
+                currentWorkingItems[idx].desc = tr.children[6].innerText.trim();
+            }
+        });
+    }
+
+    function deleteItem(index) { syncEdits(); currentWorkingItems.splice(index, 1); renderPages(); }
+
+    function addNewRow() {
+        const productKey = document.getElementById('productSelect').value;
+        if (productKey === 'custom' || currentWorkingItems.length === 0) {
+            if (productKey === 'custom') {
+                currentProductTitle = "درخواست متفرقه"; currentSubgroupName = "متفرقه";
+                currentPanelCount = parseInt(document.getElementById('panelCount').value) || 1;
+                if (!document.getElementById('panelCount').value) document.getElementById('panelCount').value = 1;
+            } else {
+                alert("لطفاً ابتدا تعداد ساخت تابلو را وارد کرده و دکمه «تولید و صدور فیش» را بزنید.");
+                return;
+            }
+        }
+        syncEdits();
+        currentWorkingItems.push({ name: "قطعه جدید...", perPanel: 1, unit: "عدد", code: "", desc: "", subName: "" });
+        renderPages();
+    }
+
+    // دانلود مستقیم فایل PDF واقعی A5
+    async function downloadDirectA5PDF() {
+        syncEdits();
+        const sheets = document.querySelectorAll('.a5-sheet');
+        if (sheets.length === 0) { alert('لطفاً ابتدا دکمه تولید و صدور فیش را بزنید.'); return; }
+        const btn = document.getElementById('btnDirectPdf');
+        const orig = btn.innerText; btn.innerText = '⏳ در حال ساخت PDF واقعی A5...'; btn.disabled = true;
+
+        try {
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a5' });
+            for (let i = 0; i < sheets.length; i++) {
+                const clone = sheets[i].cloneNode(true);
+                clone.querySelectorAll('.no-print').forEach(el => el.remove());
+                clone.style.width = '148mm'; clone.style.height = '210mm'; clone.style.margin = '0';
+                clone.style.border = '1.5px solid #000'; clone.style.position = 'fixed';
+                clone.style.top = '-9999px'; clone.style.left = '-9999px'; clone.style.background = '#ffffff';
+                document.body.appendChild(clone);
+
+                const canvas = await html2canvas(clone, { scale: 2, useCORS: true, logging: false, backgroundColor: '#ffffff' });
+                document.body.removeChild(clone);
+                if (i > 0) pdf.addPage('a5', 'portrait');
+                pdf.addImage(canvas.toDataURL('image/jpeg', 0.98), 'JPEG', 0, 0, 148, 210);
+            }
+            pdf.save(`درخواست_قطعات_${currentProductTitle}_تعداد_${currentPanelCount}_A5.pdf`);
+        } catch (e) {
+            console.error(e); alert('خطا در دانلود خودکار. لطفاً اتصال اینترنت را بررسی فرمایید.');
+        } finally {
+            btn.innerText = orig; btn.disabled = false;
+        }
+    }
+
+    function exportToWord() {
+        syncEdits();
+        const pages = document.querySelectorAll('.a5-sheet');
+        if (pages.length === 0) { alert('لطفاً ابتدا دکمه «تولید و صدور فیش» را بزنید.'); return; }
+
+        let combinedHtml = "";
+        pages.forEach((page, idx) => {
+            const clone = page.cloneNode(true);
+            clone.querySelectorAll('.no-print').forEach(el => el.remove());
+            combinedHtml += `<div class="a5-word-page">${clone.innerHTML}</div>`;
+            if (idx < pages.length - 1) combinedHtml += `<br clear=all style='mso-special-character:line-break;page-break-before:always'>`;
+        });
+
+        const wordTemplate = `
+            <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40' dir='rtl'>
+            <head><meta charset='utf-8'><title>درخواست قطعات</title>
+            <style>
+                @page { size: 148mm 210mm; margin: 5mm; }
+                body { font-family: 'Tahoma', Arial, sans-serif; direction: rtl; }
+                table { border-collapse: collapse; width: 100%; margin-top: 5px; direction: rtl; }
+                th, td { border: 1px solid #333; padding: 4px; text-align: center; font-size: 9px; }
+                th { background-color: #f2f2f2; }
+                .col-name { text-align: right; }
+                .receipt-meta { border: 1px solid #ccc; background: #f9f9f9; padding: 4px; font-size: 8.5px; margin-bottom: 5px; white-space: nowrap; }
+                .signatures-area { margin-top: 8px; width: 100%; font-size: 9px; }
+                .subgroup-tag { font-size: 8px; color: #0284c7; }
+            </style></head>
+            <body>${combinedHtml}</body></html>`;
+
+        const blob = new Blob(['\ufeff' + wordTemplate], { type: 'application/msword;charset=utf-8' });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = `درخواست_قطعات_${currentProductTitle}_تعداد_${currentPanelCount}.doc`;
+        document.body.appendChild(link); link.click(); document.body.removeChild(link);
+    }
+
+    function openBomModal() {
+        document.getElementById('bomProductSelect').value = (document.getElementById('productSelect').value === 'custom') ? 'aska' : document.getElementById('productSelect').value;
+        renderBomEditor();
+        document.getElementById('bomModalOverlay').classList.add('show');
+    }
+
+    function closeBomModal() { document.getElementById('bomModalOverlay').classList.remove('show'); }
+
+    function renderBomEditor() {
+        const prodKey = document.getElementById('bomProductSelect').value;
+        const prod = panelCatalog[prodKey];
+        const container = document.getElementById('bomEditorContent');
+        container.innerHTML = "";
+
+        for (const [subKey, sub] of Object.entries(prod.subgroups)) {
+            const block = document.createElement('div');
+            block.style.marginBottom = "20px";
+            let rows = "";
+            sub.items.forEach((item, idx) => {
+                rows += `
+                    <tr>
+                        <td style="width:40px;color:#64748b;">${idx + 1}</td>
+                        <td class="col-name" contenteditable="true" data-field="name">${item.name}</td>
+                        <td style="width:100px;"><input type="number" step="0.5" class="bom-qty-input" value="${item.perPanel}" data-sub="${subKey}" data-idx="${idx}"></td>
+                        <td style="width:70px;" contenteditable="true" data-field="unit">${item.unit}</td>
+                        <td style="width:50px;"><button style="color:#ef4444;border:none;background:none;cursor:pointer;" onclick="deleteBomItem('${prodKey}','${subKey}',${idx})">✕</button></td>
+                    </tr>`;
+            });
+
+            block.innerHTML = `
+                <div style="display:flex;justify-content:space-between;align-items:center;background:#e2e8f0;padding:6px 10px;border-radius:5px 5px 0 0;font-weight:bold;font-size:0.85rem;">
+                    <span>📌 بخش: ${sub.name}</span>
+                    <button style="font-size:0.75rem;background:#0284c7;color:white;border:none;padding:3px 8px;border-radius:4px;cursor:pointer;" onclick="addBomItem('${prodKey}','${subKey}')">➕ افزودن قطعه به فرمول</button>
+                </div>
+                <table class="bom-table">
+                    <thead><tr><th>ردیف</th><th>نام قطعه</th><th>ضریب مصرف (۱ دستگاه)</th><th>واحد</th><th>حذف</th></tr></thead>
+                    <tbody id="tbody_${subKey}">${rows || '<tr><td colspan="5" style="color:#64748b;">قطعه‌ای ثبت نشده است.</td></tr>'}</tbody>
+                </table>`;
+            container.appendChild(block);
+        }
+    }
+
+    function saveBomEdits() {
+        const prodKey = document.getElementById('bomProductSelect').value;
+        const prod = panelCatalog[prodKey];
+
+        for (const [subKey, sub] of Object.entries(prod.subgroups)) {
+            const tbody = document.getElementById(`tbody_${subKey}`);
+            if (!tbody) continue;
+            tbody.querySelectorAll('tr').forEach((tr, idx) => {
+                if (sub.items[idx]) {
+                    const n = tr.querySelector('td[data-field="name"]');
+                    const u = tr.querySelector('td[data-field="unit"]');
+                    const q = tr.querySelector('.bom-qty-input');
+                    if (n) sub.items[idx].name = n.innerText.trim();
+                    if (u) sub.items[idx].unit = u.innerText.trim();
+                    if (q) sub.items[idx].perPanel = parseFloat(q.value) || 1;
+                }
+            });
+        }
+        localStorage.setItem('savedPanelBOM', JSON.stringify(panelCatalog));
+        alert('✅ فرمول تولید با موفقیت ذخیره شد.');
+        closeBomModal();
+        onProductChange();
+    }
+
+    function resetBomToDefaults() {
+        if (confirm('آیا مطمئن هستید که می‌خواهید تمام ضرایب به فرمول تولید پیش‌فرض بازگردد؟')) {
+            panelCatalog = JSON.parse(JSON.stringify(defaultCatalog));
+            localStorage.removeItem('savedPanelBOM');
+            renderBomEditor();
+            onProductChange();
+            alert('فرمول تولید به حالت اولیه بازگردانی شد.');
+        }
+    }
+
+    function addBomItem(prodKey, subKey) {
+        panelCatalog[prodKey].subgroups[subKey].items.push({ name: "نام قطعه جدید...", perPanel: 1, unit: "عدد" });
+        renderBomEditor();
+    }
+
+    function deleteBomItem(prodKey, subKey, idx) {
+        panelCatalog[prodKey].subgroups[subKey].items.splice(idx, 1);
+        renderBomEditor();
+    }
+
+    // اسکریپت نصب PWA و مدیریت دکمه
+    let deferredPrompt;
+    window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredPrompt = e;
+        const installBtn = document.getElementById('btnInstallApp');
+        if (installBtn) installBtn.style.display = 'inline-flex';
+    });
+
+    function triggerPWAInstall() {
+        if (deferredPrompt) {
+            deferredPrompt.prompt();
+            deferredPrompt.userChoice.then(() => { deferredPrompt = null; });
+        } else {
+            alert('برای نصب، روی سه نقطه بالای مرورگر کروم بزنید و گزینه «افزودن به صفحه اصلی» (Add to Home screen) یا «نصب برنامه» را انتخاب کنید.');
+        }
+    }
+
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('./sw.js').catch(err => console.log('SW failed: ', err));
+        });
+    }
+</script>
+</body>
+</html>
