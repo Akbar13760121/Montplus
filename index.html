@@ -4,19 +4,19 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>سیستم صدور فیش A5 - درخواست قطعات از انبار مرکزی</title>
-    
-    <!-- تنظیمات رسمی وب‌اپلیکیشن (PWA) -->
-    <link rel="manifest" href="./manifest.json">
+
+    <!-- PWA -->
+    <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#1e3a8a">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <link rel="apple-touch-icon" href="./icon-192.png">
+    <meta name="apple-mobile-web-app-title" content="فیش انبار">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <link rel="apple-touch-icon" href="icon-192.png">
+    <link rel="icon" type="image/png" href="icon-192.png">
 
-    <!-- کتابخانه‌های ساخت مستقیم PDF واقعی A5 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-
     <style>
         :root {
             --primary: #1e3a8a; --primary-hover: #172554; --accent: #0284c7;
@@ -48,7 +48,7 @@
         .btn-word { background: #2b579a; color: white; }
         .btn-bom { background: #475569; color: white; }
         .btn-add { background: #0284c7; color: white; }
-        .btn-install { background: #4338ca; color: white; }
+        .btn-install { background: #7c3aed; color: white; display: none; }
         .a5-sheet { width: 148mm; min-height: 210mm; height: 210mm; background: white; padding: 5mm 7mm 4mm 7mm; margin: 0 auto 20px auto; border-radius: 4px; border: 1px solid #94a3b8; box-shadow: 0 4px 15px rgba(0,0,0,0.12); position: relative; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; }
         .receipt-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1.5px solid #0f172a; padding-bottom: 3px; margin-bottom: 4px; }
         .receipt-title h1 { font-size: 1.05rem; color: #0f172a; text-align: center; }
@@ -81,6 +81,16 @@
         .bom-table th { background: #f1f5f9; color: #1e293b; }
         .bom-table td.col-name { text-align: right; }
         .bom-qty-input { width: 60px; padding: 4px 6px; text-align: center; font-size: 0.85rem; border: 1px solid #cbd5e1; border-radius: 4px; }
+
+        /* روی گوشی: برگه A5 قابل اسکرول افقی باشد تا بیرون نزند */
+        #pagesContainer { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+        @media print {
+            .no-print { display: none !important; }
+            body { background: white; padding: 0; }
+            .a5-sheet { margin: 0; box-shadow: none; border: none; page-break-after: always; }
+            @page { size: A5 portrait; margin: 0; }
+        }
     </style>
 </head>
 <body>
@@ -141,11 +151,10 @@
             <button class="btn btn-word" onclick="exportToWord()">📝 دریافت فایل Word (قطع A5)</button>
             <button class="btn btn-bom" onclick="openBomModal()">📋 فرمول تولید (BOM)</button>
             <button class="btn btn-add" onclick="addNewRow()">➕ افزودن ردیف دستی</button>
-            <!-- دکمه نصب اختصاصی اپلیکیشن -->
-            <button class="btn btn-install" id="btnInstallApp" style="display:none;" onclick="triggerPWAInstall()">📲 نصب برنامه روی گوشی</button>
+            <button class="btn btn-install" id="btnInstall" onclick="installApp()">📲 نصب اپلیکیشن</button>
         </div>
         <p style="font-size: 0.76rem; color: #64748b; margin-top: 8px;">
-            💡 تمامی تغییرات، قطعات فریم، لاستیک و مهره پنل نجات اعمال شده و آماده نصب روی گوشی است.
+            💡 قطعه <strong>«لاستیک و مهره پلاستیکی»</strong> به پنل نجات اضافه شد.
         </p>
     </div>
 
@@ -185,6 +194,7 @@
 
 <script>
     const defaultCatalog = {
+        // ==================== تابلو آسکا ====================
         aska: {
             name: "تابلو آسکا",
             subgroups: {
@@ -290,6 +300,7 @@
                 }
             }
         },
+        // ==================== تابلو پیکا ====================
         pika: {
             name: "تابلو پیکا",
             subgroups: {
@@ -401,6 +412,7 @@
                 }
             }
         },
+        // ==================== تابلو هایرا ====================
         haira: {
             name: "تابلو هایرا",
             subgroups: {
@@ -496,9 +508,17 @@
         }
     };
 
-    let panelCatalog = JSON.parse(localStorage.getItem('savedPanelBOM')) || JSON.parse(JSON.stringify(defaultCatalog));
+    // خواندن امن از localStorage (اگر خراب یا غیرفعال بود، پیش‌فرض استفاده می‌شود)
+    function loadSavedCatalog() {
+        try {
+            const saved = localStorage.getItem('savedPanelBOM');
+            if (saved) return JSON.parse(saved);
+        } catch (e) { console.warn('localStorage read failed', e); }
+        return JSON.parse(JSON.stringify(defaultCatalog));
+    }
+    let panelCatalog = loadSavedCatalog();
 
-    // همگام‌سازی خودکار اقلام جدید در حافظه محلی
+    // به‌روزرسانی خودکار اقلام جدید در حافظه محلی مرورگر
     ['aska', 'pika', 'haira'].forEach(p => {
         if (panelCatalog[p] && panelCatalog[p].subgroups) {
             panelCatalog[p].subgroups.frame_packaging = JSON.parse(JSON.stringify(defaultCatalog[p].subgroups.frame_packaging));
@@ -757,11 +777,14 @@
         renderPages();
     }
 
-    // دانلود مستقیم فایل PDF واقعی A5
     async function downloadDirectA5PDF() {
         syncEdits();
         const sheets = document.querySelectorAll('.a5-sheet');
         if (sheets.length === 0) { alert('لطفاً ابتدا دکمه تولید و صدور فیش را بزنید.'); return; }
+        if (!window.jspdf || !window.html2canvas) {
+            alert('کتابخانه‌های ساخت PDF بارگذاری نشده‌اند. یک بار با اینترنت صفحه را باز کنید.');
+            return;
+        }
         const btn = document.getElementById('btnDirectPdf');
         const orig = btn.innerText; btn.innerText = '⏳ در حال ساخت PDF واقعی A5...'; btn.disabled = true;
 
@@ -885,7 +908,7 @@
                 }
             });
         }
-        localStorage.setItem('savedPanelBOM', JSON.stringify(panelCatalog));
+        try { localStorage.setItem('savedPanelBOM', JSON.stringify(panelCatalog)); } catch (e) { console.warn(e); }
         alert('✅ فرمول تولید با موفقیت ذخیره شد.');
         closeBomModal();
         onProductChange();
@@ -894,7 +917,7 @@
     function resetBomToDefaults() {
         if (confirm('آیا مطمئن هستید که می‌خواهید تمام ضرایب به فرمول تولید پیش‌فرض بازگردد؟')) {
             panelCatalog = JSON.parse(JSON.stringify(defaultCatalog));
-            localStorage.removeItem('savedPanelBOM');
+            try { localStorage.removeItem('savedPanelBOM'); } catch (e) { console.warn(e); }
             renderBomEditor();
             onProductChange();
             alert('فرمول تولید به حالت اولیه بازگردانی شد.');
@@ -911,27 +934,31 @@
         renderBomEditor();
     }
 
-    // اسکریپت نصب PWA و مدیریت دکمه
-    let deferredPrompt;
+    // ==================== PWA: نصب اپلیکیشن و سرویس‌ورکر ====================
+    let deferredInstallPrompt = null;
+
     window.addEventListener('beforeinstallprompt', (e) => {
         e.preventDefault();
-        deferredPrompt = e;
-        const installBtn = document.getElementById('btnInstallApp');
-        if (installBtn) installBtn.style.display = 'inline-flex';
+        deferredInstallPrompt = e;
+        document.getElementById('btnInstall').style.display = 'inline-flex';
     });
 
-    function triggerPWAInstall() {
-        if (deferredPrompt) {
-            deferredPrompt.prompt();
-            deferredPrompt.userChoice.then(() => { deferredPrompt = null; });
-        } else {
-            alert('برای نصب، روی سه نقطه بالای مرورگر کروم بزنید و گزینه «افزودن به صفحه اصلی» (Add to Home screen) یا «نصب برنامه» را انتخاب کنید.');
-        }
+    window.addEventListener('appinstalled', () => {
+        deferredInstallPrompt = null;
+        document.getElementById('btnInstall').style.display = 'none';
+    });
+
+    async function installApp() {
+        if (!deferredInstallPrompt) return;
+        deferredInstallPrompt.prompt();
+        await deferredInstallPrompt.userChoice;
+        deferredInstallPrompt = null;
+        document.getElementById('btnInstall').style.display = 'none';
     }
 
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-            navigator.serviceWorker.register('./sw.js').catch(err => console.log('SW failed: ', err));
+            navigator.serviceWorker.register('./sw.js').catch(err => console.warn('SW registration failed:', err));
         });
     }
 </script>
