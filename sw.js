@@ -1,4 +1,4 @@
-const CACHE = 'fish-a5-v1';
+const CACHE = 'fish-a5-v2';
 const LOCAL = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 const CDN = [
   'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',
