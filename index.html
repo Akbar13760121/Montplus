@@ -7,7 +7,7 @@
 
 <!-- PWA -->
 <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#0b2545">
+<meta name="theme-color" content="#1e3a8a">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="فیش انبار">
@@ -1029,6 +1029,25 @@ tr.row-flash td{animation:rowPulse 1.8s ease forwards}
         }
     }
 
+    // نام فایل خروجی بر اساس خودِ درخواست ساخته می‌شود:
+    // محصول + بخش‌های انتخابی + تعداد + شماره حواله
+    function buildReceiptFileName(ext) {
+        const BAD = '/:*?"<>|' + String.fromCharCode(92);
+        const clean = (s) => {
+            let out = (s || '').split('').filter(ch => !BAD.includes(ch)).join('');
+            out = out.split('+').join(' ');
+            out = out.split(' ').filter(Boolean).join('-');
+            out = out.split('-').filter(Boolean).join('-');
+            return out;
+        };
+        const no = clean(document.getElementById('receiptNo').value) || 'بدون-شماره';
+        if (currentProductTitle === 'درخواست متفرقه') {
+            return `درخواست-متفرقه_تعداد-${currentPanelCount}_حواله-${no}.${ext}`;
+        }
+        const sections = clean(currentSubgroupName) || 'کل-مجموعه';
+        return `درخواست-قطعات_${clean(currentProductTitle)}_${sections}_تعداد-${currentPanelCount}_حواله-${no}.${ext}`;
+    }
+
     async function downloadDirectA5PDF() {
         syncEdits();
         const sheets = document.querySelectorAll('.a5-sheet');
@@ -1056,7 +1075,7 @@ tr.row-flash td{animation:rowPulse 1.8s ease forwards}
                 if (i > 0) pdf.addPage('a5', 'portrait');
                 pdf.addImage(canvas.toDataURL('image/jpeg', 0.98), 'JPEG', 0, 0, 148, 210);
             }
-            pdf.save(`درخواست_قطعات_${currentProductTitle}_تعداد_${currentPanelCount}_A5.pdf`);
+            pdf.save(buildReceiptFileName('pdf'));
         } catch (e) {
             console.error(e); alert('خطا در دانلود خودکار. لطفاً اتصال اینترنت را بررسی فرمایید.');
         } finally {
@@ -1096,7 +1115,7 @@ tr.row-flash td{animation:rowPulse 1.8s ease forwards}
         const blob = new Blob(['\ufeff' + wordTemplate], { type: 'application/msword;charset=utf-8' });
         const link = document.createElement("a");
         link.href = URL.createObjectURL(blob);
-        link.download = `درخواست_قطعات_${currentProductTitle}_تعداد_${currentPanelCount}.doc`;
+        link.download = buildReceiptFileName('doc');
         document.body.appendChild(link); link.click(); document.body.removeChild(link);
     }
 
@@ -1274,4 +1293,4 @@ tr.row-flash td{animation:rowPulse 1.8s ease forwards}
 </script>
 
 </body>
-</html>
+</html> 
