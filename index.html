@@ -152,6 +152,13 @@ input[type=number].form-control{font-variant-numeric:tabular-nums}
 .btn-install{background:#f5f3ff;color:#6d28d9;border-color:#ddd6fe;width:100%}
 .btn-install:hover{background:#ede9fe}
 .kbd-hint{font-size:.72rem;color:var(--text-3);text-align:center;margin-top:10px}
+.mix-box{margin-top:12px}
+.btn-mix{width:100%;background:#eef2ff;color:#3730a3;border:1.5px dashed #a5b4fc}
+.btn-mix:hover{background:#e0e7ff;border-color:#818cf8}
+.mix-hint{font-size:.72rem;color:var(--text-3);line-height:1.9;margin-top:8px}
+.block-item{display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:8px 11px;font-size:.78rem;font-weight:600;color:var(--text-2);margin-top:8px;animation:pop .16s ease both}
+.block-del{flex:0 0 auto;width:26px;height:26px;border-radius:8px;border:1px solid #fecaca;background:#fef2f2;color:#dc2626;cursor:pointer;font-size:.8rem;display:grid;place-items:center}
+.block-del:hover{background:#fee2e2}
 
 /* ---------- Preview ---------- */
 .preview-panel{
@@ -349,6 +356,12 @@ tr.row-flash td{animation:rowPulse 1.8s ease forwards}
             <div id="dropdownCheckboxes"></div>
           </div>
         </div>
+      </div>
+
+      <div class="mix-box">
+        <button type="button" class="btn btn-mix" onclick="addCurrentBlock()">🧺 افزودن این انتخاب به فیش ترکیبی</button>
+        <div id="blocksList"></div>
+        <p class="mix-hint">فیش ترکیبی: هر مدل را با بخش‌ها و تعداد خودش انتخاب و به فیش اضافه کن؛ در پایان «تولید و صدور فیش» را بزن تا همه در یک فیش بیایند. اگر چیزی اضافه نکنی، فیش مثل قبل فقط برای همان یک مدل صادر می‌شود.</p>
       </div>
 
       <div class="step-label"><span class="num">۳</span> صدور و خروجی</div>
@@ -752,6 +765,8 @@ tr.row-flash td{animation:rowPulse 1.8s ease forwards}
     });
 
     let currentWorkingItems = [], currentPanelCount = 0, currentSubgroupName = "", currentProductTitle = "";
+    let receiptBlocks = [];
+    let currentCountLabel = "";
 
     window.onload = function() {
         document.getElementById('receiptDate').value = new Intl.DateTimeFormat('fa-IR', { dateStyle: 'medium' }).format(new Date());
@@ -818,7 +833,82 @@ tr.row-flash td{animation:rowPulse 1.8s ease forwards}
         }
     }
 
+    function addCurrentBlock() {
+        const productKey = document.getElementById('productSelect').value;
+        if (productKey === 'custom') { alert('درخواست متفرقه را نمی‌توان به فیش ترکیبی اضافه کرد.'); return; }
+        const count = parseInt(document.getElementById('panelCount').value.trim()) || 0;
+        if (count <= 0) { alert('لطفاً اول تعداد این مدل را وارد کنید.'); document.getElementById('panelCount').focus(); return; }
+        const checked = document.querySelectorAll('input[name="subgroupCheck"]:checked');
+        if (checked.length === 0) { alert('لطفاً حداقل یک بخش از این مدل را انتخاب کنید.'); document.getElementById('dropdownMenu').classList.add('show'); return; }
+        const product = panelCatalog[productKey];
+        const groups = [];
+        checked.forEach(cb => {
+            const g = product.subgroups[cb.value];
+            if (g) groups.push({ name: g.name, items: g.items.map(it => ({ ...it })) });
+        });
+        receiptBlocks.push({ productKey: productKey, productName: product.name, count: count, groups: groups });
+        renderBlocksList();
+    }
+
+    function renderBlocksList() {
+        const box = document.getElementById('blocksList');
+        if (!box) return;
+        if (receiptBlocks.length === 0) { box.innerHTML = ''; return; }
+        let html = '';
+        receiptBlocks.forEach((b, i) => {
+            const secs = b.groups.map(g => g.name).join(' + ');
+            html += `<div class="block-item"><span>🧺 ${b.productName} — ${secs} · تعداد ${b.count}</span><button type="button" class="block-del" title="حذف از فیش ترکیبی" onclick="removeBlock(${i})">✕</button></div>`;
+        });
+        html += `<div style="text-align:left;margin-top:6px;"><span class="action-link" style="color:#dc2626;" onclick="clearBlocks()">🗑 پاک کردن فیش ترکیبی</span></div>`;
+        box.innerHTML = html;
+    }
+
+    function removeBlock(i) { receiptBlocks.splice(i, 1); renderBlocksList(); }
+
+    function clearBlocks() { receiptBlocks = []; renderBlocksList(); }
+
+    function generateMixedReceipt() {
+        let items = [];
+        const summaries = [];
+        receiptBlocks.forEach(b => {
+            summaries.push(`${b.productName} (${b.count})`);
+            const short = b.productName.replace('تابلو ', '');
+            b.groups.forEach(g => {
+                g.items.forEach(it => items.push({
+                    name: it.name, perPanel: it.perPanel, unit: it.unit,
+                    code: '', desc: '', subName: `${short} · ${g.name}`, factor: b.count
+                }));
+            });
+        });
+        const mergedMap = new Map();
+        const mergedItems = [];
+        items.forEach(it => {
+            const key = it.name.trim() + '|' + it.unit.trim();
+            if (mergedMap.has(key)) {
+                const m = mergedMap.get(key);
+                if (typeof m.totalOverride !== 'number') {
+                    m.totalOverride = m.perPanel * m.factor;
+                    m.perPanelText = '—';
+                    m.subName = 'مشترک';
+                }
+                m.totalOverride += it.perPanel * it.factor;
+            } else {
+                mergedMap.set(key, it);
+                mergedItems.push(it);
+            }
+        });
+        items = mergedItems;
+        currentProductTitle = 'ترکیبی';
+        currentSubgroupName = summaries.join(' + ');
+        currentPanelCount = receiptBlocks.reduce((s, b) => s + b.count, 0);
+        currentCountLabel = receiptBlocks.length.toLocaleString('fa-IR') + ' مدل';
+        currentWorkingItems = items;
+        renderPages();
+    }
+
     function generateBOM() {
+        if (receiptBlocks.length > 0) { generateMixedReceipt(); return; }
+        currentCountLabel = "";
         const productKey = document.getElementById('productSelect').value;
         const count = parseInt(document.getElementById('panelCount').value.trim()) || 0;
 
@@ -895,14 +985,14 @@ tr.row-flash td{animation:rowPulse 1.8s ease forwards}
             let rowsHtml = '';
             pageItems.forEach((item, index) => {
                 const globalIndex = startIdx + index;
-                const totalQty = item.perPanel * currentPanelCount;
+                const totalQty = (typeof item.totalOverride === 'number') ? item.totalOverride : item.perPanel * (item.factor || currentPanelCount);
                 const subBadge = item.subName ? `<span class="subgroup-tag">${item.subName}</span>` : '';
                 rowsHtml += `
                     <tr data-index="${globalIndex}">
                         <td style="color:#64748b;">${globalIndex + 1}</td>
                         <td contenteditable="true" style="font-family:monospace;">${item.code || ''}</td>
                         <td class="col-name">${subBadge}<span class="item-name" contenteditable="true">${item.name}</span></td>
-                        <td contenteditable="true" style="color:#64748b;">${item.perPanel}</td>
+                        <td contenteditable="true" style="color:#64748b;">${item.perPanelText || item.perPanel}</td>
                         <td contenteditable="true"><strong style="color:#0f172a;font-size:0.95rem;">${totalQty}</strong></td>
                         <td contenteditable="true">${item.unit}</td>
                         <td contenteditable="true">${item.desc || ''}</td>
@@ -934,7 +1024,7 @@ tr.row-flash td{animation:rowPulse 1.8s ease forwards}
                     <div class="receipt-meta">
                         <div class="meta-col-product">محصول: <span>${currentProductTitle}</span></div>
                         <div class="meta-col-section" title="تولید تابلو (${currentSubgroupName})">بخش: <span>تولید تابلو (${currentSubgroupName})</span></div>
-                        <div class="meta-col-count">ساخت: <span>${currentPanelCount} دستگاه</span></div>
+                        <div class="meta-col-count">ساخت: <span>${currentCountLabel || (currentPanelCount + ' دستگاه')}</span></div>
                         <div class="meta-col-no">حواله: <span class="meta-no">${receiptNo}</span></div>
                     </div>
                     <table class="receipt-table">
@@ -988,7 +1078,8 @@ tr.row-flash td{animation:rowPulse 1.8s ease forwards}
                         name: name || 'قطعه جدید...',
                         perPanel: parseFloat(tr.children[3] && tr.children[3].innerText) || 1,
                         unit: (tr.children[5] && tr.children[5].innerText.trim()) || 'عدد',
-                        code: code, desc: desc, subName: ''
+                        code: code, desc: desc, subName: '',
+                        factor: (currentWorkingItems[0] && currentWorkingItems[0].factor) ? 1 : undefined
                     });
                 }
             }
@@ -1010,7 +1101,7 @@ tr.row-flash td{animation:rowPulse 1.8s ease forwards}
             }
         }
         syncEdits();
-        currentWorkingItems.push({ name: "قطعه جدید...", perPanel: 1, unit: "عدد", code: "", desc: "", subName: "" });
+        currentWorkingItems.push({ name: "قطعه جدید...", perPanel: 1, unit: "عدد", code: "", desc: "", subName: "", factor: (currentWorkingItems[0] && currentWorkingItems[0].factor) ? 1 : undefined });
         renderPages();
         const newTr = document.querySelector(`tr[data-index="${currentWorkingItems.length - 1}"]`);
         if (newTr) {
@@ -1041,6 +1132,9 @@ tr.row-flash td{animation:rowPulse 1.8s ease forwards}
             return out;
         };
         const no = clean(document.getElementById('receiptNo').value) || 'بدون-شماره';
+        if (currentProductTitle === 'ترکیبی') {
+            return `درخواست-قطعات_ترکیبی_${clean(currentSubgroupName)}_حواله-${no}.${ext}`;
+        }
         if (currentProductTitle === 'درخواست متفرقه') {
             return `درخواست-متفرقه_تعداد-${currentPanelCount}_حواله-${no}.${ext}`;
         }
@@ -1293,4 +1387,4 @@ tr.row-flash td{animation:rowPulse 1.8s ease forwards}
 </script>
 
 </body>
-</html> 
+</html>
