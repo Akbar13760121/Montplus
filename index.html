@@ -580,6 +580,8 @@ tr.row-flash td{animation:rowPulse 1.8s ease forwards}
                 terminals: {
                     name: "ست ترمینال",
                     items: [
+                        { name: "ریل 40 سانتی‌متری", perPanel: 1, unit: "عدد" },
+                        { name: "پایه ریل", perPanel: 3, unit: "عدد" },
                         { name: "بست انتهایی", perPanel: 2, unit: "عدد" },
                         { name: "ترمینال سبز 2.5", perPanel: 10, unit: "عدد" },
                         { name: "ترمینال زرد 2.5", perPanel: 1, unit: "عدد" },
@@ -763,6 +765,17 @@ tr.row-flash td{animation:rowPulse 1.8s ease forwards}
             }
         }
     });
+
+    // اقلام جدید ست ترمینال پیکا برای حافظه‌های ذخیره‌شده قدیمی
+    if (panelCatalog.pika && panelCatalog.pika.subgroups && panelCatalog.pika.subgroups.terminals) {
+        const pikaTermItems = panelCatalog.pika.subgroups.terminals.items;
+        if (!pikaTermItems.some(i => i.name === 'ریل 40 سانتی‌متری')) {
+            pikaTermItems.unshift({ name: "ریل 40 سانتی‌متری", perPanel: 1, unit: "عدد" });
+        }
+        if (!pikaTermItems.some(i => i.name === 'پایه ریل')) {
+            pikaTermItems.splice(1, 0, { name: "پایه ریل", perPanel: 3, unit: "عدد" });
+        }
+    }
 
     let currentWorkingItems = [], currentPanelCount = 0, currentSubgroupName = "", currentProductTitle = "";
     let receiptBlocks = [];
