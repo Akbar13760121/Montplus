@@ -788,7 +788,7 @@ tr.row-flash td{animation:rowPulse 1.8s ease forwards}
     function buildPickerCell(item) {
         const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
         const opt = (it) => `<button type="button" class="picker-opt" data-name="${esc(it.name)}" data-unit="${esc(it.unit)}" onclick="pickItem(this)">${esc(it.name)} (${esc(it.unit)})</button>`;
-        let html = `<input class="picker-input" type="text" placeholder="جستجو و انتخاب قطعه..." value="${esc(item.name)}" onfocus="openPicker(this)" oninput="filterPicker(this)" onkeydown="pickerKey(this, event)">`;
+        let html = `<input class="picker-input" type="text" placeholder="جستجو و انتخاب قطعه..." value="${esc(item.name)}" onfocus="openPicker(this);this.select()" onclick="openPicker(this)" oninput="filterPicker(this)" onkeydown="pickerKey(this, event)">`;
         html += '<div class="picker-panel">';
         html += '<button type="button" class="picker-opt free" onclick="pickFree(this)">✏️ قطعه آزاد (تایپ دستی)</button>';
         for (const pkey of ['aska', 'pika', 'haira']) {
@@ -946,7 +946,7 @@ tr.row-flash td{animation:rowPulse 1.8s ease forwards}
             currentProductTitle = "درخواست متفرقه";
             currentSubgroupName = "متفرقه";
             currentPanelCount = parseInt(document.getElementById('panelCount').value) || 1;
-            currentWorkingItems = [{ name: "قطعه اول را تایپ کنید...", perPanel: 1, unit: "عدد", code: "", desc: "", subName: "" }];
+            currentWorkingItems = [{ name: "", manual: true, perPanel: 1, perPanelText: "—", totalOverride: 1, unit: "عدد", code: "", desc: "", subName: "دستی" }];
             renderPages();
             return;
         }
@@ -1073,11 +1073,12 @@ tr.row-flash td{animation:rowPulse 1.8s ease forwards}
         let items = [];
 
         if (productKey === 'custom') {
+            if (currentWorkingItems.length > 0 && currentProductTitle === 'درخواست متفرقه') { renderPages(); return; }
             currentProductTitle = "درخواست متفرقه";
             currentSubgroupName = "متفرقه";
             items = [
-                { name: "قطعه اول را تایپ کنید...", perPanel: 1, unit: "عدد", code: "", desc: "", subName: "" },
-                { name: "قطعه دوم را تایپ کنید...", perPanel: 1, unit: "عدد", code: "", desc: "", subName: "" }
+                { name: "", manual: true, perPanel: 1, perPanelText: "—", totalOverride: 1, unit: "عدد", code: "", desc: "", subName: "دستی" },
+                { name: "", manual: true, perPanel: 1, perPanelText: "—", totalOverride: 1, unit: "عدد", code: "", desc: "", subName: "دستی" }
             ];
             currentWorkingItems = items;
             renderPages();
@@ -1246,15 +1247,14 @@ tr.row-flash td{animation:rowPulse 1.8s ease forwards}
 
     function addNewRow() {
         const productKey = document.getElementById('productSelect').value;
-        if (productKey === 'custom' || currentWorkingItems.length === 0) {
-            if (productKey === 'custom') {
-                currentProductTitle = "درخواست متفرقه"; currentSubgroupName = "متفرقه";
-                currentPanelCount = parseInt(document.getElementById('panelCount').value) || 1;
-                if (!document.getElementById('panelCount').value) document.getElementById('panelCount').value = 1;
-            } else {
-                alert("لطفاً ابتدا تعداد ساخت تابلو را وارد کرده و دکمه «تولید و صدور فیش» را بزنید.");
-                return;
-            }
+        if (currentWorkingItems.length === 0) {
+            const sel = document.getElementById('productSelect');
+            if (sel) sel.value = 'custom';
+            document.getElementById('subgroupContainer').style.display = 'none';
+            document.getElementById('labelCount').innerText = "تعداد درخواست:";
+            currentProductTitle = "درخواست متفرقه"; currentSubgroupName = "متفرقه";
+            currentPanelCount = parseInt(document.getElementById('panelCount').value) || 1;
+            if (!document.getElementById('panelCount').value) document.getElementById('panelCount').value = 1;
         }
         syncEdits();
         currentWorkingItems.push({ name: "", manual: true, perPanel: 1, perPanelText: "—", totalOverride: 1, unit: "عدد", code: "", desc: "", subName: "دستی", factor: (currentWorkingItems[0] && currentWorkingItems[0].factor) ? 1 : undefined });
@@ -1546,6 +1546,29 @@ tr.row-flash td{animation:rowPulse 1.8s ease forwards}
   /* Clicking anywhere outside a picker closes all picker panels */
   document.addEventListener('click', function(e){
     if(!e.target.closest('.picker-wrap') && typeof closeAllPickers === 'function') closeAllPickers();
+  });
+
+  /* Tapping a numeric receipt cell (ضریب / تعداد کل) or a number input
+     selects its whole content, so typing replaces it instead of appending
+     behind the old digit (the «1» problem on mobile keyboards). */
+  document.addEventListener('focusin', function(e){
+    const t = e.target;
+    if(!t) return;
+    if(t.classList && t.classList.contains('picker-input')) { try { t.select(); } catch (err) {} return; }
+    if(t.tagName === 'INPUT' && t.type === 'number') { try { t.select(); } catch (err) {} return; }
+    const td = t.closest ? t.closest('.receipt-table td[contenteditable="true"]') : null;
+    if(!td) return;
+    const tr = td.parentElement;
+    if(!tr) return;
+    const idx = Array.prototype.indexOf.call(tr.children, td);
+    if(idx === 3 || idx === 4) {
+      try {
+        const range = document.createRange();
+        range.selectNodeContents(td);
+        const sel = window.getSelection();
+        sel.removeAllRanges(); sel.addRange(range);
+      } catch (err) {}
+    }
   });
 })();
 </script>
