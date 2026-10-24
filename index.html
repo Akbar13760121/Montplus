@@ -289,6 +289,11 @@ tr.row-flash td{animation:rowPulse 1.8s ease forwards}
   html{scroll-behavior:auto}
 }
 
+/* Manual-row total: an untouched total shows a faint "1" hint (not a
+   value); it vanishes the moment the cell is tapped or typed into. */
+.receipt-table td.num-ph:empty::before{content:"1";color:#aab4c2}
+.receipt-table td.num-ph:focus:empty::before{content:none}
+
 /* ---------- Print: only the A5 sheets ---------- */
 @media print{
   .no-print{display:none !important}
@@ -959,7 +964,7 @@ tr.row-flash td{animation:rowPulse 1.8s ease forwards}
             currentProductTitle = "درخواست متفرقه";
             currentSubgroupName = "متفرقه";
             currentPanelCount = Math.trunc(parseFaNum(document.getElementById('panelCount').value)) || 1;
-            currentWorkingItems = [{ name: "", manual: true, perPanel: 1, perPanelText: "—", totalOverride: 1, unit: "عدد", code: "", desc: "", subName: "دستی" }];
+            currentWorkingItems = [{ name: "", manual: true, perPanel: 1, perPanelText: "—", totalOverride: null, unit: "عدد", code: "", desc: "", subName: "دستی" }];
             renderPages();
             return;
         }
@@ -1090,8 +1095,8 @@ tr.row-flash td{animation:rowPulse 1.8s ease forwards}
             currentProductTitle = "درخواست متفرقه";
             currentSubgroupName = "متفرقه";
             items = [
-                { name: "", manual: true, perPanel: 1, perPanelText: "—", totalOverride: 1, unit: "عدد", code: "", desc: "", subName: "دستی" },
-                { name: "", manual: true, perPanel: 1, perPanelText: "—", totalOverride: 1, unit: "عدد", code: "", desc: "", subName: "دستی" }
+                { name: "", manual: true, perPanel: 1, perPanelText: "—", totalOverride: null, unit: "عدد", code: "", desc: "", subName: "دستی" },
+                { name: "", manual: true, perPanel: 1, perPanelText: "—", totalOverride: null, unit: "عدد", code: "", desc: "", subName: "دستی" }
             ];
             currentWorkingItems = items;
             renderPages();
@@ -1150,7 +1155,8 @@ tr.row-flash td{animation:rowPulse 1.8s ease forwards}
             let rowsHtml = '';
             pageItems.forEach((item, index) => {
                 const globalIndex = startIdx + index;
-                const totalQty = (typeof item.totalOverride === 'number') ? item.totalOverride : item.perPanel * (item.factor || currentPanelCount);
+                const totalQty = (typeof item.totalOverride === 'number') ? item.totalOverride : (item.manual ? '' : item.perPanel * (item.factor || currentPanelCount));
+                const totalCell = (item.manual && totalQty === '') ? '<td contenteditable="true" class="num-ph"></td>' : `<td contenteditable="true"><strong style="color:#0f172a;font-size:0.95rem;">${totalQty}</strong></td>`;
                 const subBadge = item.subName ? `<span class="subgroup-tag">${item.subName}</span>` : '';
                 rowsHtml += `
                     <tr data-index="${globalIndex}">
@@ -1158,7 +1164,7 @@ tr.row-flash td{animation:rowPulse 1.8s ease forwards}
                         <td contenteditable="true" style="font-family:monospace;">${item.code || ''}</td>
                         <td class="col-name">${item.manual ? buildPickerCell(item) : (subBadge + '<span class="item-name" contenteditable="true">' + item.name + '</span>')}</td>
                         <td contenteditable="true" style="color:#64748b;">${item.perPanelText || item.perPanel}</td>
-                        <td contenteditable="true"><strong style="color:#0f172a;font-size:0.95rem;">${totalQty}</strong></td>
+                        ${totalCell}
                         <td contenteditable="true">${item.unit}</td>
                         <td contenteditable="true">${item.desc || ''}</td>
                         <td class="no-print"><button class="delete-btn" title="حذف" onclick="deleteItem(${globalIndex})">✕</button></td>
@@ -1236,7 +1242,8 @@ tr.row-flash td{animation:rowPulse 1.8s ease forwards}
                 currentWorkingItems[idx].unit = tr.children[5].innerText.trim();
                 currentWorkingItems[idx].desc = tr.children[6].innerText.trim();
                 if (currentWorkingItems[idx].manual) {
-                    currentWorkingItems[idx].totalOverride = parseFaNum(tr.children[4].innerText) || 1;
+                    const _tv = parseFaNum(tr.children[4].innerText);
+                    currentWorkingItems[idx].totalOverride = isNaN(_tv) ? null : _tv;
                 }
             } else if (tr.classList.contains('empty-row') && !tr.hasAttribute('data-captured')) {
                 const code = tr.children[1] ? tr.children[1].innerText.trim() : '';
@@ -1270,7 +1277,7 @@ tr.row-flash td{animation:rowPulse 1.8s ease forwards}
             if (!document.getElementById('panelCount').value) document.getElementById('panelCount').value = 1;
         }
         syncEdits();
-        currentWorkingItems.push({ name: "", manual: true, perPanel: 1, perPanelText: "—", totalOverride: 1, unit: "عدد", code: "", desc: "", subName: "دستی", factor: (currentWorkingItems[0] && currentWorkingItems[0].factor) ? 1 : undefined });
+        currentWorkingItems.push({ name: "", manual: true, perPanel: 1, perPanelText: "—", totalOverride: null, unit: "عدد", code: "", desc: "", subName: "دستی", factor: (currentWorkingItems[0] && currentWorkingItems[0].factor) ? 1 : undefined });
         renderPages();
         const newTr = document.querySelector(`tr[data-index="${currentWorkingItems.length - 1}"]`);
         if (newTr) {
