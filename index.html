@@ -206,6 +206,18 @@ input[type=number].form-control{font-variant-numeric:tabular-nums}
 .receipt-table th{background-color:#1e3a8a;color:#fff;border:1px solid #1e3a8a;padding:3px 2px;text-align:center;font-weight:bold;height:24px}
 .receipt-table td{border:1px solid #b6c2d2;padding:3px;text-align:center;height:28px}
 .item-name{display:inline-block;min-width:30px;border-radius:3px;padding:0 2px}
+.picker-wrap{position:relative}
+.picker-input{width:100%;border:1.5px solid var(--border);border-radius:6px;padding:5px 7px;font-size:.76rem;background:#fff;color:var(--text);outline:none}
+.picker-input:focus{border-color:var(--accent);box-shadow:var(--ring)}
+.picker-input::placeholder{color:var(--text-3)}
+.picker-panel{display:none;position:absolute;top:calc(100% + 4px);right:0;left:0;z-index:60;background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow-lg);max-height:250px;overflow-y:auto;padding:6px}
+.picker-panel.open{display:block}
+.picker-group{font-size:.7rem;font-weight:800;color:var(--primary-dark);background:#eef3fa;padding:5px 8px;border-radius:6px;margin-top:6px}
+.picker-group:first-of-type{margin-top:0}
+.picker-opt{display:block;width:100%;text-align:right;background:none;border:none;padding:7px 8px;font-size:.78rem;color:var(--text);cursor:pointer;border-radius:6px}
+.picker-opt:hover{background:#f0f7ff}
+.picker-opt.free{color:var(--accent);font-weight:700}
+.picker-empty{padding:10px;font-size:.76rem;color:var(--text-3);text-align:center}
 .item-name:focus{background:#fef9c3;outline:1.5px solid #eab308;outline-offset:0}
 tr.row-flash td{animation:rowPulse 1.8s ease forwards}
 @keyframes rowPulse{0%{background:#fde047}25%{background:#fef08a}100%{background:#fef9c3}}
@@ -657,8 +669,8 @@ tr.row-flash td{animation:rowPulse 1.8s ease forwards}
                         { name: "فیوز سه فاز گاسیا 32 آمپر", perPanel: 1, unit: "عدد" },
                         { name: "فیوز تکفاز گاسیا 25 آمپر", perPanel: 1, unit: "عدد" },
                         { name: "فیوز تکفاز گاسیا 10 آمپر", perPanel: 1, unit: "عدد" },
-                        { name: "کنتاکتور چانت 32 آمپر", perPanel: 1, unit: "عدد" },
-                        { name: "کنتاکتور چانت 12 آمپر", perPanel: 1, unit: "عدد" },
+                        { name: "کنتاکتور چانت 25/18 آمپر", perPanel: 1, unit: "عدد" },
+                        { name: "کنتاکتور چانت 9 آمپر", perPanel: 1, unit: "عدد" },
                         { name: "پل دیود", perPanel: 1, unit: "عدد" },
                         { name: "ست داکت", perPanel: 1, unit: "ست" },
                         { name: "ترانس", perPanel: 1, unit: "عدد" },
@@ -752,6 +764,124 @@ tr.row-flash td{animation:rowPulse 1.8s ease forwards}
     }
     let panelCatalog = loadSavedCatalog();
 
+    const extraPickerItems = [
+        { name: "سرسیم نمره 0.5 تک", unit: "عدد" },
+        { name: "سرسیم نمره 0.5 دوبل", unit: "عدد" },
+        { name: "سرسیم نمره 1 تک", unit: "عدد" },
+        { name: "سرسیم نمره 1 دوبل", unit: "عدد" },
+        { name: "سرسیم نمره 1.5 تک", unit: "عدد" },
+        { name: "سرسیم نمره 1.5 دوبل", unit: "عدد" },
+        { name: "سرسیم نمره 2.5 تک", unit: "عدد" },
+        { name: "سرسیم نمره 2.5 دوبل", unit: "عدد" },
+        { name: "سرسیم نمره 4 تک", unit: "عدد" },
+        { name: "سرسیم نمره 4 دوبل", unit: "عدد" },
+        { name: "سیم مشکی نمره 1", unit: "متر" },
+        { name: "سیم آبی نمره 1", unit: "متر" },
+        { name: "سیم زرد نمره 1", unit: "متر" },
+        { name: "سیم زرد نمره 0.35", unit: "متر" },
+        { name: "سیم قرمز نمره 1", unit: "متر" },
+        { name: "سیم قرمز نمره 0.35", unit: "متر" },
+        { name: "سیم طوسی نمره 0.75", unit: "متر" },
+        { name: "سیم سبز نمره 0.25", unit: "متر" }
+    ];
+
+    function buildPickerCell(item) {
+        const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+        const opt = (it) => `<button type="button" class="picker-opt" data-name="${esc(it.name)}" data-unit="${esc(it.unit)}" onclick="pickItem(this)">${esc(it.name)} (${esc(it.unit)})</button>`;
+        let html = `<input class="picker-input" type="text" placeholder="جستجو و انتخاب قطعه..." value="${esc(item.name)}" onfocus="openPicker(this)" oninput="filterPicker(this)" onkeydown="pickerKey(this, event)">`;
+        html += '<div class="picker-panel">';
+        html += '<button type="button" class="picker-opt free" onclick="pickFree(this)">✏️ قطعه آزاد (تایپ دستی)</button>';
+        for (const pkey of ['aska', 'pika', 'haira']) {
+            const prod = panelCatalog[pkey];
+            if (!prod || !prod.subgroups) continue;
+            for (const group of Object.values(prod.subgroups)) {
+                const seen = new Set();
+                let opts = '';
+                group.items.forEach(it => {
+                    const k = it.name + '|' + it.unit;
+                    if (seen.has(k)) return; seen.add(k);
+                    opts += opt(it);
+                });
+                if (opts) html += `<div class="picker-group">${esc(prod.name)} — ${esc(group.name)}</div>${opts}`;
+            }
+        }
+        let wireOpts = '';
+        extraPickerItems.forEach(it => { wireOpts += opt(it); });
+        if (wireOpts) html += `<div class="picker-group">سیم و سرسیم</div>${wireOpts}`;
+        html += '<div class="picker-empty" style="display:none;">موردی پیدا نشد — دکمه «قطعه آزاد» را بزنید.</div></div>';
+        const tag = item.subName ? `<span class="subgroup-tag">${item.subName}</span>` : '';
+        return tag + '<div class="picker-wrap">' + html + '</div>';
+    }
+
+    // نرمال‌سازی برای جستجو: نیم‌فاصله و «ي/ك» عربی با فارسی یکی می‌شوند
+    const pickNorm = (s) => String(s || '').split(String.fromCharCode(8204)).join('').split(String.fromCharCode(8205)).join('').split('ي').join('ی').split('ك').join('ک').trim();
+
+    function openPicker(input) {
+        const panel = input.parentElement.querySelector('.picker-panel');
+        if (!panel) return;
+        document.querySelectorAll('.picker-panel.open').forEach(p => { if (p !== panel) p.classList.remove('open'); });
+        panel.classList.add('open');
+        panel.querySelectorAll('.picker-opt[data-name]').forEach(o => { o.style.display = ''; });
+        panel.querySelectorAll('.picker-group').forEach(g => { g.style.display = ''; });
+        const empty = panel.querySelector('.picker-empty'); if (empty) empty.style.display = 'none';
+    }
+
+    function closeAllPickers() {
+        document.querySelectorAll('.picker-panel.open').forEach(p => p.classList.remove('open'));
+    }
+
+    function filterPicker(input) {
+        const panel = input.parentElement.querySelector('.picker-panel');
+        if (!panel) return;
+        panel.classList.add('open');
+        const q = pickNorm(input.value);
+        let any = false;
+        panel.querySelectorAll('.picker-opt[data-name]').forEach(o => {
+            const show = !q || pickNorm(o.dataset.name).includes(q);
+            o.style.display = show ? '' : 'none';
+            if (show) any = true;
+        });
+        let cur = null;
+        [...panel.children].forEach(el => {
+            if (el.classList.contains('picker-group')) { cur = el; cur.style.display = 'none'; }
+            else if (el.classList.contains('picker-opt') && el.dataset.name && el.style.display !== 'none' && cur) { cur.style.display = ''; }
+        });
+        const empty = panel.querySelector('.picker-empty');
+        if (empty) empty.style.display = any ? 'none' : '';
+    }
+
+    function pickItem(btn) {
+        const wrap = btn.closest('.picker-wrap');
+        const input = wrap.querySelector('.picker-input');
+        input.value = btn.dataset.name;
+        const tr = wrap.closest('tr');
+        const unitCell = tr && tr.children[5];
+        if (unitCell && btn.dataset.unit) unitCell.innerText = btn.dataset.unit;
+        wrap.querySelector('.picker-panel').classList.remove('open');
+    }
+
+    function pickFree(btn) {
+        const wrap = btn.closest('.picker-wrap');
+        const input = wrap.querySelector('.picker-input');
+        const td = wrap.parentElement;
+        const val = input.value.trim() || 'قطعه جدید...';
+        const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+        td.innerHTML = '<span class="subgroup-tag">دستی</span><span class="item-name" contenteditable="true">' + esc(val) + '</span>';
+    }
+
+    function pickerKey(input, e) {
+        if (e.key === 'Escape') {
+            const panel = input.parentElement.querySelector('.picker-panel');
+            if (panel) panel.classList.remove('open');
+            input.blur();
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            const panel = input.parentElement.querySelector('.picker-panel');
+            const first = panel && [...panel.querySelectorAll('.picker-opt[data-name]')].find(o => o.style.display !== 'none');
+            if (first) pickItem(first);
+        }
+    }
+
     // به‌روزرسانی خودکار اقلام جدید در حافظه محلی مرورگر
     ['aska', 'pika', 'haira'].forEach(p => {
         if (panelCatalog[p] && panelCatalog[p].subgroups) {
@@ -775,6 +905,14 @@ tr.row-flash td{animation:rowPulse 1.8s ease forwards}
         if (!pikaTermItems.some(i => i.name === 'پایه ریل')) {
             pikaTermItems.splice(1, 0, { name: "پایه ریل", perPanel: 3, unit: "عدد" });
         }
+    }
+
+    // تغییر نام کنتاکتورهای هایرا برای حافظه‌های ذخیره‌شده قدیمی
+    if (panelCatalog.haira && panelCatalog.haira.subgroups && panelCatalog.haira.subgroups.main) {
+        panelCatalog.haira.subgroups.main.items.forEach(it => {
+            if (it.name === 'کنتاکتور چانت 32 آمپر') it.name = 'کنتاکتور چانت 25/18 آمپر';
+            if (it.name === 'کنتاکتور چانت 12 آمپر') it.name = 'کنتاکتور چانت 9 آمپر';
+        });
     }
 
     let currentWorkingItems = [], currentPanelCount = 0, currentSubgroupName = "", currentProductTitle = "";
@@ -1004,7 +1142,7 @@ tr.row-flash td{animation:rowPulse 1.8s ease forwards}
                     <tr data-index="${globalIndex}">
                         <td style="color:#64748b;">${globalIndex + 1}</td>
                         <td contenteditable="true" style="font-family:monospace;">${item.code || ''}</td>
-                        <td class="col-name">${subBadge}<span class="item-name" contenteditable="true">${item.name}</span></td>
+                        <td class="col-name">${item.manual ? buildPickerCell(item) : (subBadge + '<span class="item-name" contenteditable="true">' + item.name + '</span>')}</td>
                         <td contenteditable="true" style="color:#64748b;">${item.perPanelText || item.perPanel}</td>
                         <td contenteditable="true"><strong style="color:#0f172a;font-size:0.95rem;">${totalQty}</strong></td>
                         <td contenteditable="true">${item.unit}</td>
@@ -1067,6 +1205,8 @@ tr.row-flash td{animation:rowPulse 1.8s ease forwards}
     function syncEdits() {
         const readName = (cell) => {
             if (!cell) return '';
+            const pinput = cell.querySelector ? cell.querySelector('.picker-input') : null;
+            if (pinput) return pinput.value.trim();
             const nameEl = cell.querySelector ? cell.querySelector('.item-name') : null;
             if (nameEl) return nameEl.innerText.trim();
             const clone = cell.cloneNode(true);
@@ -1081,6 +1221,9 @@ tr.row-flash td{animation:rowPulse 1.8s ease forwards}
                 currentWorkingItems[idx].perPanel = parseFloat(tr.children[3].innerText) || 1;
                 currentWorkingItems[idx].unit = tr.children[5].innerText.trim();
                 currentWorkingItems[idx].desc = tr.children[6].innerText.trim();
+                if (currentWorkingItems[idx].manual) {
+                    currentWorkingItems[idx].totalOverride = parseFloat(tr.children[4].innerText) || 1;
+                }
             } else if (tr.classList.contains('empty-row') && !tr.hasAttribute('data-captured')) {
                 const code = tr.children[1] ? tr.children[1].innerText.trim() : '';
                 const name = readName(tr.children[2]);
@@ -1114,13 +1257,15 @@ tr.row-flash td{animation:rowPulse 1.8s ease forwards}
             }
         }
         syncEdits();
-        currentWorkingItems.push({ name: "قطعه جدید...", perPanel: 1, unit: "عدد", code: "", desc: "", subName: "", factor: (currentWorkingItems[0] && currentWorkingItems[0].factor) ? 1 : undefined });
+        currentWorkingItems.push({ name: "", manual: true, perPanel: 1, perPanelText: "—", totalOverride: 1, unit: "عدد", code: "", desc: "", subName: "دستی", factor: (currentWorkingItems[0] && currentWorkingItems[0].factor) ? 1 : undefined });
         renderPages();
         const newTr = document.querySelector(`tr[data-index="${currentWorkingItems.length - 1}"]`);
         if (newTr) {
             newTr.classList.add('row-flash');
             if (newTr.scrollIntoView) newTr.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            const nameCell = newTr.querySelector('.item-name') || newTr.children[2];
+            const pickerEl = newTr.querySelector('.picker-input');
+            if (pickerEl) { pickerEl.focus(); }
+            const nameCell = pickerEl ? null : (newTr.querySelector('.item-name') || newTr.children[2]);
             if (nameCell && nameCell.focus) {
                 nameCell.focus();
                 try {
@@ -1172,6 +1317,7 @@ tr.row-flash td{animation:rowPulse 1.8s ease forwards}
             for (let i = 0; i < sheets.length; i++) {
                 const clone = sheets[i].cloneNode(true);
                 clone.querySelectorAll('.no-print').forEach(el => el.remove());
+                clone.querySelectorAll('.picker-wrap').forEach(wrap => { const inp = wrap.querySelector('.picker-input'); const sp = document.createElement('span'); sp.textContent = inp ? inp.value : ''; wrap.replaceWith(sp); });
                 clone.style.width = '148mm'; clone.style.height = '210mm'; clone.style.margin = '0';
                 clone.style.border = '1.5px solid #000'; clone.style.position = 'fixed';
                 clone.style.top = '-9999px'; clone.style.left = '-9999px'; clone.style.background = '#ffffff';
@@ -1199,6 +1345,7 @@ tr.row-flash td{animation:rowPulse 1.8s ease forwards}
         pages.forEach((page, idx) => {
             const clone = page.cloneNode(true);
             clone.querySelectorAll('.no-print').forEach(el => el.remove());
+            clone.querySelectorAll('.picker-wrap').forEach(wrap => { const inp = wrap.querySelector('.picker-input'); const sp = document.createElement('span'); sp.textContent = inp ? inp.value : ''; wrap.replaceWith(sp); });
             combinedHtml += `<div class="a5-word-page">${clone.innerHTML}</div>`;
             if (idx < pages.length - 1) combinedHtml += `<br clear=all style='mso-special-character:line-break;page-break-before:always'>`;
         });
@@ -1396,6 +1543,10 @@ tr.row-flash td{animation:rowPulse 1.8s ease forwards}
   if(overlay){
     overlay.addEventListener('click', function(e){ if(e.target === overlay) overlay.classList.remove('show'); });
   }
+  /* Clicking anywhere outside a picker closes all picker panels */
+  document.addEventListener('click', function(e){
+    if(!e.target.closest('.picker-wrap') && typeof closeAllPickers === 'function') closeAllPickers();
+  });
 })();
 </script>
 
